@@ -7,6 +7,8 @@ namespace Tests\Providers\Gemini;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\Providers\Gemini\Gemini;
+use Prism\Prism\Schema\ObjectSchema;
+use Prism\Prism\Schema\StringSchema;
 use Tests\Fixtures\FixtureResponse;
 
 it('can create a batch job with inline requests using fluent API', function (): void {
@@ -82,6 +84,76 @@ it('can create batch job with complex options using fluent API', function (): vo
             ->withPrompt('What is the capital of France?')
             ->usingTemperature(0.5)
             ->withMaxTokens(1000)
+            ->toRequest(),
+    ];
+
+    $batchJob = $provider->createBatchInline('gemini-1.5-flash-002', $requests);
+
+    expect($batchJob->name)->toBe('batches/batch-job-123');
+    expect($batchJob->model)->toBe('models/gemini-1.5-flash-002');
+    expect($batchJob->state)->toBe('JOB_STATE_PENDING');
+});
+
+it('can create batch job with structured requests using fluent API', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/batch-create-structured');
+
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $schema = new ObjectSchema(
+        'user_info',
+        'User information',
+        [
+            new StringSchema('name', 'User name', true),
+            new StringSchema('email', 'User email', true),
+        ],
+        ['name', 'email']
+    );
+
+    $requests = [
+        Prism::structured()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withSchema($schema)
+            ->withPrompt('Extract user info: John Doe, john@example.com')
+            ->toRequest(),
+        Prism::structured()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withSchema($schema)
+            ->withPrompt('Extract user info: Jane Smith, jane@example.com')
+            ->toRequest(),
+    ];
+
+    $batchJob = $provider->createBatchInline('gemini-1.5-flash-002', $requests);
+
+    expect($batchJob->name)->toBe('batches/batch-job-789');
+    expect($batchJob->model)->toBe('models/gemini-1.5-flash-002');
+    expect($batchJob->state)->toBe('JOB_STATE_PENDING');
+});
+
+it('can create batch job mixing text and structured requests', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/batch-create-inline');
+
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $schema = new ObjectSchema(
+        'analysis',
+        'Analysis result',
+        [
+            new StringSchema('summary', 'Summary', true),
+        ],
+        ['summary']
+    );
+
+    $requests = [
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('What is AI?')
+            ->toRequest(),
+        Prism::structured()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withSchema($schema)
+            ->withPrompt('Analyze this text: AI is transforming technology')
             ->toRequest(),
     ];
 

@@ -208,7 +208,7 @@ class Gemini extends Provider
     /**
      * Create a batch job with inline requests
      *
-     * @param  array<TextRequest|array<string, mixed>>  $requests  Array of TextRequest objects or request payloads
+     * @param  array<TextRequest|StructuredRequest|array<string, mixed>>  $requests  Array of TextRequest, StructuredRequest objects or request payloads
      */
     public function createBatchInline(string $model, array $requests): GeminiBatchJob
     {
