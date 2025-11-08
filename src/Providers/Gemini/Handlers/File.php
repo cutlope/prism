@@ -20,16 +20,16 @@ class File
     public function upload(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
     {
         // First, get the upload URL
-        $metadata = Arr::whereNotNull([
-            'file' => [
-                'displayName' => $displayName ?? basename($filePath),
-            ],
-        ]);
+        $metadata = [
+            'file' => Arr::whereNotNull([
+                'display_name' => $displayName ?? basename($filePath),
+            ]),
+        ];
 
         $uploadResponse = $this->client
             ->withHeaders(['X-Goog-Upload-Protocol' => 'resumable'])
             ->withHeader('X-Goog-Upload-Command', 'start')
-            ->withHeader('X-Goog-Upload-Header-Content-Length', filesize($filePath))
+            ->withHeader('X-Goog-Upload-Header-Content-Length', (string) filesize($filePath))
             ->withHeader('X-Goog-Upload-Header-Content-Type', $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream')
             ->post('/upload/v1beta/files', $metadata);
 
@@ -40,7 +40,7 @@ class File
 
         $finalizeResponse = $this->client
             ->withHeaders([
-                'Content-Length' => strlen($fileContent),
+                'Content-Length' => (string) strlen($fileContent),
                 'X-Goog-Upload-Offset' => '0',
                 'X-Goog-Upload-Command' => 'upload, finalize',
             ])
@@ -52,10 +52,15 @@ class File
 
     /**
      * Get file metadata
+     *
+     * @param  string  $fileName  File name/ID (with or without 'files/' prefix)
      */
     public function get(string $fileName): GeminiFile
     {
-        $response = $this->client->get("/files/{$fileName}");
+        // Ensure fileName has the correct format
+        $fileName = str_starts_with($fileName, 'files/') ? $fileName : "files/{$fileName}";
+
+        $response = $this->client->get("/{$fileName}");
 
         return GeminiFile::fromResponse($response->json());
     }
@@ -81,10 +86,15 @@ class File
 
     /**
      * Delete a file
+     *
+     * @param  string  $fileName  File name/ID (with or without 'files/' prefix)
      */
     public function delete(string $fileName): bool
     {
-        $response = $this->client->delete("/files/{$fileName}");
+        // Ensure fileName has the correct format
+        $fileName = str_starts_with($fileName, 'files/') ? $fileName : "files/{$fileName}";
+
+        $response = $this->client->delete("/{$fileName}");
 
         return $response->successful();
     }

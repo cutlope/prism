@@ -19,6 +19,8 @@ readonly class GeminiFile
         public string $sha256Hash,
         public string $uri,
         public string $state,
+        public ?string $downloadUri = null,
+        public ?string $source = null,
         public ?array $videoMetadata = null,
     ) {}
 
@@ -38,7 +40,33 @@ readonly class GeminiFile
             sha256Hash: data_get($response, 'sha256Hash', ''),
             uri: data_get($response, 'uri', ''),
             state: data_get($response, 'state', ''),
+            downloadUri: data_get($response, 'downloadUri'),
+            source: data_get($response, 'source'),
             videoMetadata: data_get($response, 'videoMetadata'),
         );
+    }
+
+    /**
+     * Check if file is ready to use (state is ACTIVE)
+     */
+    public function isActive(): bool
+    {
+        return $this->state === 'ACTIVE';
+    }
+
+    /**
+     * Check if file is still being processed
+     */
+    public function isProcessing(): bool
+    {
+        return $this->state === 'PROCESSING';
+    }
+
+    /**
+     * Check if file processing failed
+     */
+    public function isFailed(): bool
+    {
+        return $this->state === 'FAILED';
     }
 }
