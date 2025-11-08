@@ -193,3 +193,33 @@ it('can create batch job with custom batch keys', function (): void {
     expect($requests[0]->batchKey())->toBe('france-capital');
     expect($requests[1]->batchKey())->toBe('spain-capital');
 });
+
+it('can parse batch results from output file', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/batch-output-results');
+
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $results = $provider->getBatchResults('https://generativelanguage.googleapis.com/v1beta/files/output-123');
+
+    // Verify all results are present
+    expect($results)->toHaveKeys(['request-1', 'request-2', 'structured-1']);
+
+    // Verify text response
+    expect($results['request-1'])->toHaveKey('success', true);
+    expect($results['request-1'])->toHaveKey('type', 'text');
+    expect($results['request-1'])->toHaveKey('text', 'Paris is the capital of France.');
+    expect($results['request-1'])->toHaveKey('usage');
+    expect($results['request-1']['usage']['promptTokens'])->toBe(15);
+    expect($results['request-1']['usage']['completionTokens'])->toBe(8);
+
+    // Verify cached response
+    expect($results['request-2'])->toHaveKey('success', true);
+    expect($results['request-2']['usage']['cacheReadInputTokens'])->toBe(10);
+
+    // Verify structured response
+    expect($results['structured-1'])->toHaveKey('success', true);
+    expect($results['structured-1'])->toHaveKey('type', 'structured');
+    expect($results['structured-1'])->toHaveKey('structured');
+    expect($results['structured-1']['structured'])->toBe(['name' => 'John Doe', 'email' => 'john@example.com']);
+});

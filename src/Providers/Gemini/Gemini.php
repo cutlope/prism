@@ -359,6 +359,24 @@ class Gemini extends Provider
     }
 
     /**
+     * Get and parse batch results from output file
+     *
+     * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
+     */
+    public function getBatchResults(string $outputFileUri): array
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->getBatchResults($outputFileUri);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-results', $e);
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $options
      * @param  array<mixed>  $retry
      */

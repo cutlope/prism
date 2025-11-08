@@ -697,6 +697,94 @@ Delete a completed batch job:
 $provider->deleteBatch($batch->name);
 ```
 
+### Parsing Batch Results
+
+Once a batch job is completed, you can parse the results from the output file:
+
+```php
+// Wait for batch to complete
+$batch = $provider->getBatch($batchName);
+
+while (!$batch->isCompleted() && !$batch->isFailed()) {
+    sleep(10);
+    $batch = $provider->getBatch($batchName);
+}
+
+if ($batch->isCompleted() && $batch->outputUri) {
+    // Parse the results
+    $results = $provider->getBatchResults($batch->outputUri);
+
+    // Results are keyed by the request keys you specified
+    foreach ($results as $key => $result) {
+        if ($result['success']) {
+            echo "Request {$key}:\n";
+            echo "Type: {$result['type']}\n";  // 'text' or 'structured'
+            echo "Text: {$result['text']}\n";
+
+            // For structured responses
+            if ($result['type'] === 'structured') {
+                print_r($result['structured']);
+            }
+
+            // Check usage
+            echo "Tokens used: {$result['usage']['totalTokens']}\n";
+
+            // Check if cached content was used
+            if (isset($result['usage']['cacheReadInputTokens'])) {
+                echo "Cached tokens: {$result['usage']['cacheReadInputTokens']}\n";
+            }
+        } else {
+            echo "Request {$key} failed:\n";
+            echo "Error: {$result['error']['message']}\n";
+        }
+    }
+}
+```
+
+The parsed results contain:
+
+- `success`: Whether the request succeeded
+- `type`: Either `'text'` or `'structured'`
+- `text`: The generated text content
+- `structured`: Parsed JSON object (only for structured requests)
+- `finishReason`: Why the generation stopped (e.g., `'STOP'`, `'MAX_TOKENS'`)
+- `usage`: Token usage information
+  - `promptTokens`: Input tokens
+  - `completionTokens`: Output tokens
+  - `totalTokens`: Total tokens
+  - `cacheReadInputTokens`: Tokens read from cache (if caching was used)
+  - `thoughtTokens`: Tokens used for thinking (if applicable)
+- `meta`: Additional metadata (e.g., response ID)
+- `error`: Error information (only if `success` is `false`)
+
+Example with batch keys:
+
+```php
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of France?')
+        ->withBatchKey('france')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of Spain?')
+        ->withBatchKey('spain')
+        ->toRequest(),
+];
+
+$batch = $provider->createBatchInline('gemini-1.5-flash', $requests);
+
+// ... wait for completion ...
+
+$results = $provider->getBatchResults($batch->outputUri);
+
+// Access results by key
+echo $results['france']['text'];  // "Paris is the capital of France."
+echo $results['spain']['text'];   // "Madrid is the capital of Spain."
+```
+
 ### Batch API Best Practices
 
 1. **Use caching for repeated context**: When multiple requests share the same large context (documents, system prompts), create a cached content object first.

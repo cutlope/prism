@@ -113,6 +113,51 @@ class Batch
     }
 
     /**
+     * Parse batch results from output file
+     *
+     * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
+     */
+    public function getBatchResults(string $outputFileUri): array
+    {
+        // Fetch the JSONL output file
+        $response = $this->client->get($outputFileUri);
+
+        if (! $response->successful()) {
+            throw new PrismException('Failed to fetch batch results from output file');
+        }
+
+        $jsonlContent = $response->body();
+        $lines = explode("\n", trim($jsonlContent));
+
+        $results = [];
+
+        foreach ($lines as $line) {
+            if (in_array(trim($line), ['', '0'], true)) {
+                continue;
+            }
+
+            $entry = json_decode($line, true);
+            if (! $entry) {
+                continue;
+            }
+            if (! isset($entry['key'])) {
+                continue;
+            }
+            if (! isset($entry['response'])) {
+                continue;
+            }
+
+            $key = $entry['key'];
+            $responseData = $entry['response'];
+
+            // Parse the response data into a structured format
+            $results[$key] = $this->parseResponseData($responseData);
+        }
+
+        return $results;
+    }
+
+    /**
      * Get batch job status and details
      */
     public function get(string $batchName): GeminiBatchJob
@@ -159,6 +204,75 @@ class Batch
         $response = $this->client->delete("/{$batchName}");
 
         return $response->successful();
+    }
+    /**
+     * Parse individual response data from batch output
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function parseResponseData(array $data): array
+    {
+        // Check if response has an error
+        if (isset($data['error'])) {
+            return [
+                'success' => false,
+                'error' => [
+                    'code' => $data['error']['code'] ?? 'unknown',
+                    'message' => $data['error']['message'] ?? 'unknown',
+                ],
+            ];
+        }
+
+        // Extract the text content
+        $text = data_get($data, 'candidates.0.content.parts.0.text', '');
+
+        // Check if this is a structured response (JSON)
+        $isStructured = false;
+        $structured = null;
+
+        if (! empty($text) && str_starts_with(trim((string) $text), '{')) {
+            $decoded = json_decode((string) $text, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $isStructured = true;
+                $structured = $decoded;
+            }
+        }
+
+        // Parse usage data
+        $usage = [
+            'promptTokens' => data_get($data, 'usageMetadata.promptTokenCount', 0),
+            'completionTokens' => data_get($data, 'usageMetadata.candidatesTokenCount', 0),
+            'totalTokens' => data_get($data, 'usageMetadata.totalTokenCount', 0),
+            'cacheReadInputTokens' => data_get($data, 'usageMetadata.cachedContentTokenCount'),
+            'thoughtTokens' => data_get($data, 'usageMetadata.thoughtsTokenCount'),
+        ];
+
+        // Parse finish reason
+        $finishReason = data_get($data, 'candidates.0.finishReason', 'STOP');
+
+        $result = [
+            'success' => true,
+            'text' => $text,
+            'finishReason' => $finishReason,
+            'usage' => $usage,
+        ];
+
+        if ($isStructured) {
+            $result['structured'] = $structured;
+            $result['type'] = 'structured';
+        } else {
+            $result['type'] = 'text';
+        }
+
+        // Include metadata if present
+        if (isset($data['id'])) {
+            $result['meta'] = [
+                'id' => $data['id'],
+            ];
+        }
+
+        return $result;
     }
 
     /**
