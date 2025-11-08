@@ -437,13 +437,22 @@ $batch = $provider->createBatchFromFile(
 );
 ```
 
-The JSONL file should contain one request per line:
+The JSONL file should contain one request per line. Each line must include a user-defined `key` field and a `request` field. The key is used to match responses to requests in the output:
 
 ```json
-{"request": {"contents": [{"parts": [{"text": "What is AI?"}]}]}}
-{"request": {"contents": [{"parts": [{"text": "What is ML?"}]}]}}
-{"request": {"contents": [{"parts": [{"text": "What is NLP?"}]}]}}
+{"key": "request-1", "request": {"contents": [{"parts": [{"text": "What is AI?"}]}]}}
+{"key": "request-2", "request": {"contents": [{"parts": [{"text": "What is ML?"}]}]}}
+{"key": "request-3", "request": {"contents": [{"parts": [{"text": "What is NLP?"}]}]}}
 ```
+
+You can also include `generation_config` and other request parameters:
+
+```json
+{"key": "creative-story", "request": {"contents": [{"parts": [{"text": "Write a story about a dragon"}]}], "generation_config": {"temperature": 0.9}}}
+{"key": "technical-doc", "request": {"contents": [{"parts": [{"text": "Explain quantum computing"}]}], "generation_config": {"temperature": 0.3}}}
+```
+
+The maximum allowed file size is 2GB.
 
 ### Batch Request Options
 
