@@ -62,4 +62,14 @@ readonly class GeminiBatchJob
     {
         return in_array($this->state, ['JOB_STATE_RUNNING', 'BATCH_STATE_RUNNING'], true);
     }
+
+    public function isCancelled(): bool
+    {
+        return in_array($this->state, ['JOB_STATE_CANCELLED', 'BATCH_STATE_CANCELLED'], true);
+    }
+
+    public function isExpired(): bool
+    {
+        return in_array($this->state, ['JOB_STATE_EXPIRED', 'BATCH_STATE_EXPIRED'], true);
+    }
 }
