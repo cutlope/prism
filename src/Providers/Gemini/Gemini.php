@@ -359,18 +359,24 @@ class Gemini extends Provider
     }
 
     /**
-     * Get and parse batch results from output file
+     * Get and parse batch results from output file, inline responses, or batch job object
      *
+     * @param  string|array<int, array<string, mixed>>|GeminiBatchJob  $source  Output file URI, inline responses array, or batch job object
      * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
      */
-    public function getBatchResults(string $outputFileUri): array
+    public function getBatchResults(string|array|GeminiBatchJob $source): array
     {
         $handler = new Batch(
             $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
         );
 
+        // If given a GeminiBatchJob, extract the appropriate source
+        if ($source instanceof GeminiBatchJob) {
+            $source = $source->inlineResponses ?? $source->outputFileUri;
+        }
+
         try {
-            return $handler->getBatchResults($outputFileUri);
+            return $handler->getBatchResults($source);
         } catch (RequestException $e) {
             throw PrismException::providerRequestError('batch-results', $e);
         }

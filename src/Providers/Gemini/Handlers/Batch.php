@@ -113,14 +113,24 @@ class Batch
     }
 
     /**
-     * Parse batch results from output file
+     * Parse batch results from output file or inline responses
      *
+     * @param  string|array<int, array<string, mixed>>|null  $source  Output file URI or inline responses array
      * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
      */
-    public function getBatchResults(string $outputFileUri): array
+    public function getBatchResults(string|array|null $source): array
     {
+        // Handle inline responses
+        if (is_array($source)) {
+            return $this->parseInlineResponses($source);
+        }
+
+        if ($source === null) {
+            throw new PrismException('No results available: batch has neither output file URI nor inline responses');
+        }
+
         // Fetch the JSONL output file
-        $response = $this->client->get($outputFileUri);
+        $response = $this->client->get($source);
 
         if (! $response->successful()) {
             throw new PrismException('Failed to fetch batch results from output file');
@@ -205,6 +215,30 @@ class Batch
 
         return $response->successful();
     }
+    /**
+     * Parse inline batch responses
+     *
+     * @param  array<int, array<string, mixed>>  $inlineResponses
+     * @return array<string, array<string, mixed>>
+     */
+    protected function parseInlineResponses(array $inlineResponses): array
+    {
+        $results = [];
+
+        foreach ($inlineResponses as $entry) {
+            if (! isset($entry['metadata']['key'])) {
+                continue;
+            }
+
+            $key = $entry['metadata']['key'];
+            $responseData = $entry['response'] ?? $entry;
+
+            $results[$key] = $this->parseResponseData($responseData);
+        }
+
+        return $results;
+    }
+
     /**
      * Parse individual response data from batch output
      *
