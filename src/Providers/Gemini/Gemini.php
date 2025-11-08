@@ -210,30 +210,32 @@ class Gemini extends Provider
      *
      * @param  array<TextRequest|StructuredRequest|array<string, mixed>>  $requests  Array of TextRequest, StructuredRequest objects or request payloads
      */
-    public function createBatchInline(string $model, array $requests): GeminiBatchJob
+    public function createBatchInline(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
     {
         $handler = new Batch(
             $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
         );
 
         try {
-            return $handler->createInline($model, $requests);
+            return $handler->createInline($model, $requests, $displayName);
         } catch (RequestException $e) {
             throw PrismException::providerRequestError('batch-create', $e);
         }
     }
 
     /**
-     * Create a batch job from a JSONL file URI
+     * Create a batch job from a JSONL file
+     *
+     * @param  string  $fileName  The file name/ID from Files API (e.g., 'files/abc123')
      */
-    public function createBatchFromFile(string $inputFileUri): GeminiBatchJob
+    public function createBatchFromFile(string $model, string $fileName, ?string $displayName = null): GeminiBatchJob
     {
         $handler = new Batch(
             $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
         );
 
         try {
-            return $handler->createFromFile($inputFileUri);
+            return $handler->createFromFile($model, $fileName, $displayName);
         } catch (RequestException $e) {
             throw PrismException::providerRequestError('batch-create-file', $e);
         }

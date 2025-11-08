@@ -27,21 +27,33 @@ class Batch
      *
      * @param  array<TextRequest|StructuredRequest|array<string, mixed>>  $requests  Array of TextRequest, StructuredRequest objects or request payloads
      */
-    public function createInline(string $model, array $requests): GeminiBatchJob
+    public function createInline(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
     {
         // Convert TextRequest and StructuredRequest objects to request payloads
         $requestPayloads = array_map(
-            fn (array|\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request $request): array => match (true) {
-                $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
-                $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
-                default => $request,
-            },
+            fn (array|\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request $request): array => [
+                'request' => match (true) {
+                    $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
+                    $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
+                    default => $request,
+                },
+            ],
             $requests
         );
 
-        $response = $this->client->post('/batches', [
-            'requests' => $requestPayloads,
-        ]);
+        $requestBody = [
+            'batch' => Arr::whereNotNull([
+                'displayName' => $displayName ?? 'Prism Batch '.now()->format('Y-m-d H:i:s'),
+                'model' => 'models/'.$model,
+                'inputConfig' => [
+                    'requests' => [
+                        'requests' => $requestPayloads,
+                    ],
+                ],
+            ]),
+        ];
+
+        $response = $this->client->post("models/{$model}:batchGenerateContent", $requestBody);
 
         return GeminiBatchJob::fromResponse($response->json());
     }
@@ -49,11 +61,19 @@ class Batch
     /**
      * Create a batch job from a JSONL file
      */
-    public function createFromFile(string $inputFileUri): GeminiBatchJob
+    public function createFromFile(string $model, string $fileName, ?string $displayName = null): GeminiBatchJob
     {
-        $response = $this->client->post('/batches', [
-            'sourceUri' => $inputFileUri,
-        ]);
+        $requestBody = [
+            'batch' => Arr::whereNotNull([
+                'displayName' => $displayName ?? 'Prism Batch '.now()->format('Y-m-d H:i:s'),
+                'model' => 'models/'.$model,
+                'inputConfig' => [
+                    'fileName' => $fileName,
+                ],
+            ]),
+        ];
+
+        $response = $this->client->post("models/{$model}:batchGenerateContent", $requestBody);
 
         return GeminiBatchJob::fromResponse($response->json());
     }
@@ -147,7 +167,6 @@ class Batch
         }
 
         return Arr::whereNotNull([
-            'model' => 'models/'.$request->model(),
             ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
             'cachedContent' => $providerOptions['cachedContentName'] ?? null,
             'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
@@ -203,7 +222,6 @@ class Batch
         }
 
         return Arr::whereNotNull([
-            'model' => 'models/'.$request->model(),
             ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
             'cachedContent' => $providerOptions['cachedContentName'] ?? null,
             'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
