@@ -6,7 +6,13 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Providers\Gemini\Maps\MessageMap;
+use Prism\Prism\Providers\Gemini\Maps\ToolChoiceMap;
+use Prism\Prism\Providers\Gemini\Maps\ToolMap;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiBatchJob;
+use Prism\Prism\Text\Request as TextRequest;
+use Prism\Prism\ValueObjects\ProviderTool;
 
 class Batch
 {
@@ -17,12 +23,20 @@ class Batch
     /**
      * Create a batch job with inline requests
      *
-     * @param  array<array<string, mixed>>  $requests  Array of request payloads
+     * @param  array<TextRequest|array<string, mixed>>  $requests  Array of TextRequest objects or request payloads
      */
     public function createInline(string $model, array $requests): GeminiBatchJob
     {
+        // Convert TextRequest objects to request payloads
+        $requestPayloads = array_map(
+            fn (array|\Prism\Prism\Text\Request $request): array => $request instanceof TextRequest
+                ? $this->convertTextRequestToPayload($request)
+                : $request,
+            $requests
+        );
+
         $response = $this->client->post('/batches', [
-            'requests' => $requests,
+            'requests' => $requestPayloads,
         ]);
 
         return GeminiBatchJob::fromResponse($response->json());
@@ -90,32 +104,52 @@ class Batch
     }
 
     /**
-     * Build a request payload for batch API
+     * Convert a TextRequest to a batch request payload
      *
-     * @param  array<array<string, mixed>>  $messages
-     * @param  array<string, mixed>  $systemInstruction
-     * @param  array<string, mixed>  $generationConfig
      * @return array<string, mixed>
      */
-    public function buildRequest(
-        string $model,
-        array $messages = [],
-        ?array $systemInstruction = null,
-        array $generationConfig = [],
-        ?string $cachedContentName = null,
-        array $tools = [],
-        ?array $toolConfig = null,
-        ?array $safetySettings = null
-    ): array {
+    protected function convertTextRequestToPayload(TextRequest $request): array
+    {
+        $providerOptions = $request->providerOptions();
+
+        $thinkingConfig = Arr::whereNotNull([
+            'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
+        ]);
+
+        $generationConfig = Arr::whereNotNull([
+            'temperature' => $request->temperature(),
+            'topP' => $request->topP(),
+            'maxOutputTokens' => $request->maxTokens(),
+            'thinkingConfig' => $thinkingConfig !== [] ? $thinkingConfig : null,
+        ]);
+
+        if ($request->tools() !== [] && $request->providerTools() !== []) {
+            throw new PrismException('Use of provider tools with custom tools is not currently supported by Gemini.');
+        }
+
+        $tools = [];
+
+        if ($request->providerTools() !== []) {
+            $tools = [
+                Arr::mapWithKeys(
+                    $request->providerTools(),
+                    fn (ProviderTool $providerTool): array => [$providerTool->type => (object) []]
+                ),
+            ];
+        }
+
+        if ($request->tools() !== []) {
+            $tools['function_declarations'] = ToolMap::map($request->tools());
+        }
+
         return Arr::whereNotNull([
-            'model' => 'models/'.$model,
-            'contents' => $messages,
-            'systemInstruction' => $systemInstruction,
-            'cachedContent' => $cachedContentName,
+            'model' => 'models/'.$request->model(),
+            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
             'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
             'tools' => $tools !== [] ? $tools : null,
-            'tool_config' => $toolConfig,
-            'safetySettings' => $safetySettings,
+            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
+            'safetySettings' => $providerOptions['safetySettings'] ?? null,
         ]);
     }
 }
