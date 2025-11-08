@@ -16,13 +16,17 @@ use Prism\Prism\Exceptions\PrismProviderOverloadedException;
 use Prism\Prism\Exceptions\PrismRateLimitedException;
 use Prism\Prism\Images\Request as ImagesRequest;
 use Prism\Prism\Images\Response as ImagesResponse;
+use Prism\Prism\Providers\Gemini\Handlers\Batch;
 use Prism\Prism\Providers\Gemini\Handlers\Cache;
 use Prism\Prism\Providers\Gemini\Handlers\Embeddings;
+use Prism\Prism\Providers\Gemini\Handlers\File;
 use Prism\Prism\Providers\Gemini\Handlers\Images;
 use Prism\Prism\Providers\Gemini\Handlers\Stream;
 use Prism\Prism\Providers\Gemini\Handlers\Structured;
 use Prism\Prism\Providers\Gemini\Handlers\Text;
+use Prism\Prism\Providers\Gemini\ValueObjects\GeminiBatchJob;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiCachedObject;
+use Prism\Prism\Providers\Gemini\ValueObjects\GeminiFile;
 use Prism\Prism\Providers\Provider;
 use Prism\Prism\Structured\Request as StructuredRequest;
 use Prism\Prism\Structured\Response as StructuredResponse;
@@ -132,6 +136,172 @@ class Gemini extends Provider
             return $handler->handle();
         } catch (RequestException $e) {
             $this->handleRequestException($model, $e);
+        }
+    }
+
+    /**
+     * Upload a file to the Gemini Files API
+     */
+    public function uploadFile(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->upload($filePath, $displayName, $mimeType);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-upload', $e);
+        }
+    }
+
+    /**
+     * Get file metadata from the Gemini Files API
+     */
+    public function getFile(string $fileName): GeminiFile
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->get($fileName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-get', $e);
+        }
+    }
+
+    /**
+     * List all files from the Gemini Files API
+     *
+     * @return GeminiFile[]
+     */
+    public function listFiles(int $pageSize = 100): array
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->list($pageSize);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-list', $e);
+        }
+    }
+
+    /**
+     * Delete a file from the Gemini Files API
+     */
+    public function deleteFile(string $fileName): bool
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->delete($fileName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-delete', $e);
+        }
+    }
+
+    /**
+     * Create a batch job with inline requests
+     *
+     * @param  array<array<string, mixed>>  $requests  Array of request payloads
+     */
+    public function createBatchInline(string $model, array $requests): GeminiBatchJob
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->createInline($model, $requests);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-create', $e);
+        }
+    }
+
+    /**
+     * Create a batch job from a JSONL file URI
+     */
+    public function createBatchFromFile(string $inputFileUri): GeminiBatchJob
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->createFromFile($inputFileUri);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-create-file', $e);
+        }
+    }
+
+    /**
+     * Get batch job status and details
+     */
+    public function getBatch(string $batchName): GeminiBatchJob
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->get($batchName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-get', $e);
+        }
+    }
+
+    /**
+     * List all batch jobs
+     *
+     * @return GeminiBatchJob[]
+     */
+    public function listBatches(int $pageSize = 100): array
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->list($pageSize);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-list', $e);
+        }
+    }
+
+    /**
+     * Cancel a batch job
+     */
+    public function cancelBatch(string $batchName): GeminiBatchJob
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->cancel($batchName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-cancel', $e);
+        }
+    }
+
+    /**
+     * Delete a batch job
+     */
+    public function deleteBatch(string $batchName): bool
+    {
+        $handler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->delete($batchName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-delete', $e);
         }
     }
 

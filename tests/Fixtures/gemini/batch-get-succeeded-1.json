@@ -1,0 +1,8 @@
+{
+  "name": "batches/batch-job-123",
+  "model": "models/gemini-1.5-flash-002",
+  "state": "JOB_STATE_SUCCEEDED",
+  "createTime": "2025-03-01T10:00:00.000000Z",
+  "updateTime": "2025-03-01T10:30:00.000000Z",
+  "outputUri": "https://generativelanguage.googleapis.com/v1beta/files/output-123"
+}
