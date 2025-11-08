@@ -163,3 +163,33 @@ it('can create batch job mixing text and structured requests', function (): void
     expect($batchJob->model)->toBe('models/gemini-1.5-flash-002');
     expect($batchJob->state)->toBe('JOB_STATE_PENDING');
 });
+
+it('can create batch job with custom batch keys', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/batch-create-inline');
+
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $requests = [
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('What is the capital of France?')
+            ->withBatchKey('france-capital')
+            ->toRequest(),
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('What is the capital of Spain?')
+            ->withBatchKey('spain-capital')
+            ->toRequest(),
+    ];
+
+    $batchJob = $provider->createBatchInline('gemini-1.5-flash-002', $requests);
+
+    expect($batchJob->name)->toBe('batches/batch-job-123');
+    expect($batchJob->model)->toBe('models/gemini-1.5-flash-002');
+    expect($batchJob->state)->toBe('JOB_STATE_PENDING');
+
+    // Verify batch keys are set
+    expect($requests[0]->batchKey())->toBe('france-capital');
+    expect($requests[1]->batchKey())->toBe('spain-capital');
+});

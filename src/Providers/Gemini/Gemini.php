@@ -242,6 +242,57 @@ class Gemini extends Provider
     }
 
     /**
+     * Create a batch job from Prism requests (automatically generates and uploads JSONL file)
+     *
+     * @param  array<\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request>  $requests  Array of TextRequest or StructuredRequest objects
+     */
+    public function createBatchFromRequests(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
+    {
+        $batchHandler = new Batch(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        // Convert requests to JSONL format
+        $jsonlContent = $batchHandler->convertRequestsToJsonl($requests);
+
+        // Save JSONL to a temporary file
+        $tempFile = tempnam(sys_get_temp_dir(), 'prism_batch_');
+        file_put_contents($tempFile, $jsonlContent);
+
+        try {
+            // Upload the JSONL file
+            $file = $this->uploadFile(
+                filePath: $tempFile,
+                displayName: $displayName ?? 'Prism Batch Requests '.now()->format('Y-m-d H:i:s'),
+                mimeType: 'application/jsonl'
+            );
+
+            // Wait for the file to be processed
+            $maxAttempts = 30; // 30 seconds max
+            $attempts = 0;
+            while ($file->isProcessing() && $attempts < $maxAttempts) {
+                sleep(1);
+                $file = $this->getFile($file->name);
+                $attempts++;
+            }
+
+            if ($file->isFailed()) {
+                throw new PrismException('File upload failed during processing');
+            }
+
+            if ($file->isProcessing()) {
+                throw new PrismException('File is still processing after 30 seconds');
+            }
+
+            // Create the batch from the uploaded file
+            return $this->createBatchFromFile($model, $file->name, $displayName);
+        } finally {
+            // Clean up the temporary file
+            @unlink($tempFile);
+        }
+    }
+
+    /**
      * Get batch job status and details
      */
     public function getBatch(string $batchName): GeminiBatchJob

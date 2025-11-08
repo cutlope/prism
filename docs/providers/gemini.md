@@ -412,6 +412,60 @@ $batch = $provider->createBatchInline(
 );
 ```
 
+### Using Batch Keys
+
+Batch keys allow you to identify specific requests in the batch output. This is useful when you need to match responses to their corresponding requests:
+
+```php
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of France?')
+        ->withBatchKey('france-capital')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of Spain?')
+        ->withBatchKey('spain-capital')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of Italy?')
+        ->withBatchKey('italy-capital')
+        ->toRequest(),
+];
+
+$batch = $provider->createBatchInline(
+    model: 'gemini-1.5-flash',
+    requests: $requests
+);
+
+// When the batch completes, each response will be tagged with its corresponding key
+// This allows you to easily match responses to their original requests
+```
+
+Batch keys work with both text and structured requests:
+
+```php
+$requests = [
+    Prism::structured()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withSchema($schema)
+        ->withPrompt('Analyze customer feedback: "Great product!"')
+        ->withBatchKey('feedback-1')
+        ->toRequest(),
+
+    Prism::structured()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withSchema($schema)
+        ->withPrompt('Analyze customer feedback: "Needs improvement"')
+        ->withBatchKey('feedback-2')
+        ->toRequest(),
+];
+```
+
 ### Creating File-Based Batch Requests
 
 For very large batches, you can upload a JSONL file containing your requests:
@@ -453,6 +507,53 @@ You can also include `generation_config` and other request parameters:
 ```
 
 The maximum allowed file size is 2GB.
+
+### Automatic JSONL Generation from Prism Requests
+
+For large batches, you can use `createBatchFromRequests()` which automatically generates the JSONL file, uploads it, and creates the batch job:
+
+```php
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is quantum computing?')
+        ->withBatchKey('quantum-q1')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is machine learning?')
+        ->withBatchKey('ml-q1')
+        ->toRequest(),
+
+    // ... hundreds or thousands more requests
+];
+
+// Automatically generates JSONL, uploads file, and creates batch
+$batch = $provider->createBatchFromRequests(
+    model: 'gemini-1.5-flash',
+    requests: $requests,
+    displayName: 'Large Analysis Batch'  // Optional
+);
+
+echo $batch->name;   // models/.../batchJobs/abc123...
+echo $batch->state;  // PENDING
+```
+
+This method:
+1. Converts your Prism requests to JSONL format
+2. Creates a temporary file with the JSONL content
+3. Uploads the file via the Files API
+4. Waits for the file to be processed (up to 30 seconds)
+5. Creates the batch job using the uploaded file
+6. Cleans up the temporary file
+
+If you don't specify batch keys with `withBatchKey()`, automatic keys will be generated (`request-0`, `request-1`, etc.).
+
+This is particularly useful when you have:
+- Hundreds or thousands of requests
+- Requests generated dynamically from a database or other source
+- Complex request configurations that are easier to build with Prism's fluent API
 
 ### Batch Request Options
 

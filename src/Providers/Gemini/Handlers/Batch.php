@@ -31,13 +31,18 @@ class Batch
     {
         // Convert TextRequest and StructuredRequest objects to request payloads
         $requestPayloads = array_map(
-            fn (array|\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request $request): array => [
+            fn (array|\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request $request): array => Arr::whereNotNull([
                 'request' => match (true) {
                     $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
                     $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
                     default => $request,
                 },
-            ],
+                'metadata' => match (true) {
+                    $request instanceof TextRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
+                    $request instanceof StructuredRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
+                    default => null,
+                },
+            ]),
             $requests
         );
 
@@ -76,6 +81,35 @@ class Batch
         $response = $this->client->post("models/{$model}:batchGenerateContent", $requestBody);
 
         return GeminiBatchJob::fromResponse($response->json());
+    }
+
+    /**
+     * Convert Prism requests to JSONL format
+     *
+     * @param  array<TextRequest|StructuredRequest>  $requests  Array of TextRequest or StructuredRequest objects
+     * @return string JSONL content
+     */
+    public function convertRequestsToJsonl(array $requests): string
+    {
+        $jsonlLines = [];
+
+        foreach ($requests as $index => $request) {
+            $payload = match (true) {
+                $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
+                $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
+                default => throw new PrismException('Invalid request type. Only TextRequest and StructuredRequest are supported.'),
+            };
+
+            // For file-based batches, use top-level "key" field (different from inline batches)
+            $line = [
+                'key' => $request->batchKey() ?? "request-{$index}",
+                'request' => $payload,
+            ];
+
+            $jsonlLines[] = json_encode($line);
+        }
+
+        return implode("\n", $jsonlLines);
     }
 
     /**

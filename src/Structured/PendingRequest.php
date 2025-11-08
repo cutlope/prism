@@ -36,6 +36,8 @@ class PendingRequest
     use HasSchema;
     use HasTools;
 
+    protected ?string $batchKey = null;
+
     /**
      * @deprecated Use `asStructured` instead.
      */
@@ -53,6 +55,16 @@ class PendingRequest
         } catch (RequestException $e) {
             $this->provider->handleRequestException($request->model(), $e);
         }
+    }
+
+    /**
+     * Set a batch key for this request (used in Gemini batch operations)
+     */
+    public function withBatchKey(string $key): self
+    {
+        $this->batchKey = $key;
+
+        return $this;
     }
 
     public function toRequest(): Request
@@ -89,6 +101,7 @@ class PendingRequest
             maxSteps: $this->maxSteps,
             providerOptions: $this->providerOptions,
             providerTools: $this->providerTools,
+            batchKey: $this->batchKey,
         );
     }
 }
