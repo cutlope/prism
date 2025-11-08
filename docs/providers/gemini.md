@@ -195,6 +195,410 @@ $response = Prism::text()
     ->asText();
 ```
 
+## Files API
+
+Gemini's Files API allows you to upload files to Google's servers for use in generation requests. Files are automatically deleted after 48 hours (or sooner if you specify a custom TTL). This is particularly useful for large files or when using the same file across multiple requests.
+
+### Uploading Files
+
+Upload a file from your local filesystem:
+
+```php
+use Prism\Prism\Enums\Provider;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Providers\Gemini\Gemini;
+
+/** @var Gemini */
+$provider = Prism::provider(Provider::Gemini);
+
+$file = $provider->uploadFile(
+    filePath: '/path/to/document.pdf',
+    displayName: 'My Document',  // Optional
+    mimeType: 'application/pdf'  // Optional, auto-detected if not provided
+);
+
+echo $file->name;        // files/abc123...
+echo $file->uri;         // https://generativelanguage.googleapis.com/v1beta/files/abc123...
+echo $file->sizeBytes;   // File size in bytes
+echo $file->state;       // PROCESSING, ACTIVE, or FAILED
+```
+
+### File States
+
+Uploaded files go through different states. Use helper methods to check the status:
+
+```php
+if ($file->isProcessing()) {
+    echo "File is still being processed...";
+}
+
+if ($file->isActive()) {
+    echo "File is ready to use!";
+    // Use the file in your requests
+}
+
+if ($file->isFailed()) {
+    echo "File processing failed";
+}
+```
+
+### Getting File Metadata
+
+Retrieve information about a previously uploaded file:
+
+```php
+// Using full file name
+$file = $provider->getFile('files/abc123...');
+
+// Or just the ID (prefix is added automatically)
+$file = $provider->getFile('abc123...');
+```
+
+### Listing Files
+
+List all uploaded files:
+
+```php
+$files = $provider->listFiles();
+
+foreach ($files as $file) {
+    echo "{$file->displayName}: {$file->state}\n";
+}
+```
+
+### Deleting Files
+
+Delete a file before its automatic expiration:
+
+```php
+// Using full file name
+$provider->deleteFile('files/abc123...');
+
+// Or just the ID
+$provider->deleteFile('abc123...');
+```
+
+### Using Uploaded Files in Requests
+
+Once a file is uploaded and active, you can reference it by URI in your generation requests:
+
+```php
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+use Prism\Prism\ValueObjects\Media\Document;
+
+$file = $provider->uploadFile('/path/to/large-document.pdf');
+
+// Wait for file to be active
+while ($file->isProcessing()) {
+    sleep(1);
+    $file = $provider->getFile($file->name);
+}
+
+$response = Prism::text()
+    ->using(Provider::Gemini, 'gemini-1.5-flash')
+    ->withMessages([
+        new UserMessage('Summarize this document', [
+            Document::fromUrl($file->uri),
+        ]),
+    ])
+    ->asText();
+```
+
+## Batch API
+
+Gemini's Batch API allows you to send multiple requests in a single batch operation, reducing costs by up to 50% compared to standard requests. Batch requests are processed asynchronously, making them ideal for non-time-sensitive workloads.
+
+### Creating Inline Batch Requests
+
+Create batch requests directly using Prism's fluent API:
+
+```php
+use Prism\Prism\Enums\Provider;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Providers\Gemini\Gemini;
+
+/** @var Gemini */
+$provider = Prism::provider(Provider::Gemini);
+
+// Create individual requests using Prism's fluent API
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of France?')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of Spain?')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('What is the capital of Italy?')
+        ->toRequest(),
+];
+
+// Submit the batch
+$batch = $provider->createBatchInline(
+    model: 'gemini-1.5-flash',
+    requests: $requests,
+    displayName: 'Capital Cities Batch'  // Optional
+);
+
+echo $batch->name;   // models/.../batchJobs/abc123...
+echo $batch->state;  // PENDING, RUNNING, SUCCEEDED, or FAILED
+```
+
+### Using Structured Requests in Batches
+
+You can include structured output requests in your batches:
+
+```php
+use Prism\Prism\Schema\ObjectSchema;
+use Prism\Prism\Schema\StringSchema;
+
+$schema = new ObjectSchema(
+    name: 'city_info',
+    description: 'Information about a city',
+    properties: [
+        new StringSchema('city', 'The city name'),
+        new StringSchema('country', 'The country name'),
+        new StringSchema('population', 'The population'),
+    ],
+    requiredFields: ['city', 'country']
+);
+
+$requests = [
+    Prism::structured()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withSchema($schema)
+        ->withPrompt('Get information about Paris')
+        ->toRequest(),
+
+    Prism::structured()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withSchema($schema)
+        ->withPrompt('Get information about Madrid')
+        ->toRequest(),
+];
+
+$batch = $provider->createBatchInline(
+    model: 'gemini-1.5-flash',
+    requests: $requests
+);
+```
+
+### Mixing Text and Structured Requests
+
+You can combine both text and structured requests in the same batch:
+
+```php
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('Write a haiku about the ocean')
+        ->toRequest(),
+
+    Prism::structured()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withSchema($schema)
+        ->withPrompt('Get information about Tokyo')
+        ->toRequest(),
+];
+
+$batch = $provider->createBatchInline(
+    model: 'gemini-1.5-flash',
+    requests: $requests
+);
+```
+
+### Creating File-Based Batch Requests
+
+For very large batches, you can upload a JSONL file containing your requests:
+
+```php
+// First, upload your JSONL file
+$file = $provider->uploadFile(
+    filePath: '/path/to/batch-requests.jsonl',
+    mimeType: 'application/jsonl'
+);
+
+// Wait for the file to be processed
+while ($file->isProcessing()) {
+    sleep(1);
+    $file = $provider->getFile($file->name);
+}
+
+// Create batch from the uploaded file
+$batch = $provider->createBatchFromFile(
+    model: 'gemini-1.5-flash',
+    fileName: $file->name,
+    displayName: 'Large Batch Job'  // Optional
+);
+```
+
+The JSONL file should contain one request per line:
+
+```json
+{"request": {"contents": [{"parts": [{"text": "What is AI?"}]}]}}
+{"request": {"contents": [{"parts": [{"text": "What is ML?"}]}]}}
+{"request": {"contents": [{"parts": [{"text": "What is NLP?"}]}]}}
+```
+
+### Batch Request Options
+
+You can use all standard Prism options in batch requests:
+
+```php
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('Write a creative story')
+        ->withMaxTokens(1000)
+        ->withTemperature(0.9)
+        ->withSystemPrompt('You are a creative storyteller')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withPrompt('Write a technical manual')
+        ->withMaxTokens(500)
+        ->withTemperature(0.3)
+        ->toRequest(),
+];
+
+$batch = $provider->createBatchInline(
+    model: 'gemini-1.5-flash',
+    requests: $requests
+);
+```
+
+### Using Caching with Batch Requests
+
+Combine context caching with batch requests for maximum efficiency:
+
+```php
+use Prism\Prism\ValueObjects\Messages\SystemMessage;
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+use Prism\Prism\ValueObjects\Media\Document;
+
+// First, create a cached context
+$cachedContent = $provider->cache(
+    model: 'gemini-1.5-flash',
+    messages: [
+        new UserMessage('', [
+            Document::fromLocalPath('/path/to/large-document.pdf'),
+        ]),
+    ],
+    systemPrompts: [
+        new SystemMessage('You are a legal analyst.'),
+    ],
+    ttl: 3600  // 1 hour
+);
+
+// Create batch requests that reference the cached content
+$requests = [
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withProviderOptions(['cachedContentName' => $cachedContent->name])
+        ->withPrompt('What are the key legal risks in section 1?')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withProviderOptions(['cachedContentName' => $cachedContent->name])
+        ->withPrompt('What are the key legal risks in section 2?')
+        ->toRequest(),
+
+    Prism::text()
+        ->using(Provider::Gemini, 'gemini-1.5-flash')
+        ->withProviderOptions(['cachedContentName' => $cachedContent->name])
+        ->withPrompt('What are the key legal risks in section 3?')
+        ->toRequest(),
+];
+
+$batch = $provider->createBatchInline(
+    model: 'gemini-1.5-flash',
+    requests: $requests,
+    displayName: 'Legal Analysis Batch'
+);
+```
+
+This combination provides:
+- **50% cost reduction** from batch API
+- **Reduced input token costs** from context caching
+- **Consistent context** across all requests in the batch
+
+### Managing Batch Jobs
+
+Check the status of a batch job:
+
+```php
+$batch = $provider->getBatch($batch->name);
+
+echo $batch->state;        // PENDING, RUNNING, SUCCEEDED, or FAILED
+echo $batch->displayName;
+```
+
+Use helper methods to check batch status:
+
+```php
+if ($batch->isPending()) {
+    echo "Batch is queued for processing";
+}
+
+if ($batch->isRunning()) {
+    echo "Batch is currently being processed";
+}
+
+if ($batch->isCompleted()) {
+    echo "Batch has finished successfully!";
+
+    // Download results from the output URI
+    if ($batch->outputUri) {
+        echo "Results available at: {$batch->outputUri}";
+    }
+}
+
+if ($batch->isFailed()) {
+    echo "Batch processing failed";
+}
+```
+
+List all batch jobs:
+
+```php
+$batches = $provider->listBatches();
+
+foreach ($batches as $batch) {
+    echo "{$batch->displayName}: {$batch->state}\n";
+}
+```
+
+Cancel a running batch job:
+
+```php
+$provider->cancelBatch($batch->name);
+```
+
+Delete a completed batch job:
+
+```php
+$provider->deleteBatch($batch->name);
+```
+
+### Batch API Best Practices
+
+1. **Use caching for repeated context**: When multiple requests share the same large context (documents, system prompts), create a cached content object first.
+
+2. **Batch size**: There's no hard limit, but consider breaking very large batches (1000+ requests) into smaller batches for better monitoring.
+
+3. **Monitor job status**: Batch jobs are asynchronous. Poll the job status periodically to know when results are ready.
+
+4. **Cost optimization**: Combining batching (50% discount) with caching can reduce costs by 80-90% for certain workloads.
+
+5. **File-based batches**: For batches with thousands of requests, use file-based batching instead of inline requests.
+
 ## Embeddings
 
 You can customize your Gemini embeddings request with additional parameters using `->withProviderOptions()`.
