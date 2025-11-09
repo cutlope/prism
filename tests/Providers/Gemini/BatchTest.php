@@ -237,20 +237,26 @@ it('can parse batch results from output file (file-based batches return keyed ar
     expect($results)->toHaveKeys(['request-1', 'request-2', 'structured-1']);
 
     // Verify text response
-    expect($results['request-1'])->toHaveKey('success', true);
-    expect($results['request-1'])->toHaveKey('type', 'text');
-    expect($results['request-1'])->toHaveKey('text', 'Paris is the capital of France.');
+    expect($results['request-1'])->toHaveKey('success');
+    expect($results['request-1']['success'])->toBe(true);
+    expect($results['request-1'])->toHaveKey('type');
+    expect($results['request-1']['type'])->toBe('text');
+    expect($results['request-1'])->toHaveKey('text');
+    expect($results['request-1']['text'])->toBe('Paris is the capital of France.');
     expect($results['request-1'])->toHaveKey('usage');
     expect($results['request-1']['usage']['promptTokens'])->toBe(15);
     expect($results['request-1']['usage']['completionTokens'])->toBe(8);
 
     // Verify cached response
-    expect($results['request-2'])->toHaveKey('success', true);
+    expect($results['request-2'])->toHaveKey('success');
+    expect($results['request-2']['success'])->toBe(true);
     expect($results['request-2']['usage']['cacheReadInputTokens'])->toBe(10);
 
     // Verify structured response
-    expect($results['structured-1'])->toHaveKey('success', true);
-    expect($results['structured-1'])->toHaveKey('type', 'structured');
+    expect($results['structured-1'])->toHaveKey('success');
+    expect($results['structured-1']['success'])->toBe(true);
+    expect($results['structured-1'])->toHaveKey('type');
+    expect($results['structured-1']['type'])->toBe('structured');
     expect($results['structured-1'])->toHaveKey('structured');
     expect($results['structured-1']['structured'])->toBe(['name' => 'John Doe', 'email' => 'john@example.com']);
 });
@@ -297,7 +303,8 @@ it('parses inline batch results as indexed array (no order assumption)', functio
     // First result has explicit key
     expect($results[0])->toHaveKey('text');
     expect($results[0]['text'])->toBe('Response 1');
-    expect($results[0])->toHaveKey('batchKey', 'custom-key');  // Key is included in result
+    expect($results[0])->toHaveKey('batchKey');
+    expect($results[0]['batchKey'])->toBe('custom-key');  // Key is included in result
     expect($results[0]['usage']['totalTokens'])->toBe(15);
 
     // Second and third results have no keys (keys are optional)
