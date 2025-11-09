@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Providers\Gemini;
 
 use Prism\Prism\Enums\Provider;
+use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\Providers\Gemini\Gemini;
 use Prism\Prism\Schema\ObjectSchema;
@@ -306,4 +307,24 @@ it('parses inline batch results as indexed array (no order assumption)', functio
     expect($results[2])->toHaveKey('text', 'Response 3');
     expect($results[2])->not->toHaveKey('batchKey');
     expect($results[2]['usage']['totalTokens'])->toBe(18);
+});
+
+it('throws error when converting requests to JSONL without batch keys', function (): void {
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $requests = [
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Request with key')
+            ->withBatchKey('has-key')
+            ->toRequest(),
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Request without key')
+            ->toRequest(),  // Missing key - should throw
+    ];
+
+    expect(fn () => $provider->convertRequestsToJsonl($requests))
+        ->toThrow(PrismException::class, 'Batch key is required for file-based batches. Request at index 1 is missing a batch key.');
 });

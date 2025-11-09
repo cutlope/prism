@@ -87,10 +87,12 @@ class Batch
     /**
      * Convert Prism requests to JSONL format
      *
-     * For file-based batches, keys are required. Auto-generates keys if not provided.
+     * For file-based batches, keys are required. User must provide keys via withBatchKey().
      *
      * @param  array<TextRequest|StructuredRequest>  $requests  Array of TextRequest or StructuredRequest objects
      * @return string JSONL content
+     *
+     * @throws PrismException if any request is missing a batch key
      */
     public function convertRequestsToJsonl(array $requests): string
     {
@@ -103,9 +105,14 @@ class Batch
                 default => throw new PrismException('Invalid request type. Only TextRequest and StructuredRequest are supported.'),
             };
 
-            // For file-based batches, keys are required - auto-generate if not provided
+            // For file-based batches, keys are required - throw error if not provided
+            $key = $request->batchKey();
+            if ($key === null) {
+                throw new PrismException("Batch key is required for file-based batches. Request at index {$index} is missing a batch key. Use withBatchKey() to provide one.");
+            }
+
             $line = [
-                'key' => $request->batchKey() ?? "request-{$index}",
+                'key' => $key,
                 'request' => $payload,
             ];
 
