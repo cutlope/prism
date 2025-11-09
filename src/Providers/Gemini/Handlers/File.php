@@ -21,6 +21,12 @@ class File
     public function upload(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
     {
         $detectedMimeType = $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream';
+
+        if ($detectedMimeType === 'application/jsonl') {
+            // Temp fix - https://github.com/googleapis/python-genai/issues/1590
+            $detectedMimeType = 'application/json';
+        }
+
         $fileName = basename($filePath);
         $fileSize = filesize($filePath);
 
