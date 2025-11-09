@@ -7,19 +7,16 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
 use Prism\Prism\Exceptions\PrismException;
-use Prism\Prism\Providers\Gemini\Maps\MessageMap;
-use Prism\Prism\Providers\Gemini\Maps\SchemaMap;
-use Prism\Prism\Providers\Gemini\Maps\ToolChoiceMap;
-use Prism\Prism\Providers\Gemini\Maps\ToolMap;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiBatchJob;
 use Prism\Prism\Structured\Request as StructuredRequest;
 use Prism\Prism\Text\Request as TextRequest;
-use Prism\Prism\ValueObjects\ProviderTool;
 
 class Batch
 {
     public function __construct(
         protected PendingRequest $client,
+        protected Text $textHandler,
+        protected Structured $structuredHandler,
     ) {}
 
     /**
@@ -329,104 +326,24 @@ class Batch
     /**
      * Convert a TextRequest to a batch request payload
      *
+     * Delegates to the Text handler to build the payload
+     *
      * @return array<string, mixed>
      */
     protected function convertTextRequestToPayload(TextRequest $request): array
     {
-        $providerOptions = $request->providerOptions();
-
-        $thinkingConfig = Arr::whereNotNull([
-            'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
-        ]);
-
-        $generationConfig = Arr::whereNotNull([
-            'temperature' => $request->temperature(),
-            'topP' => $request->topP(),
-            'maxOutputTokens' => $request->maxTokens(),
-            'thinkingConfig' => $thinkingConfig !== [] ? $thinkingConfig : null,
-        ]);
-
-        if ($request->tools() !== [] && $request->providerTools() !== []) {
-            throw new PrismException('Use of provider tools with custom tools is not currently supported by Gemini.');
-        }
-
-        $tools = [];
-
-        if ($request->providerTools() !== []) {
-            $tools = [
-                Arr::mapWithKeys(
-                    $request->providerTools(),
-                    fn (ProviderTool $providerTool): array => [$providerTool->type => (object) []]
-                ),
-            ];
-        }
-
-        if ($request->tools() !== []) {
-            $tools['function_declarations'] = ToolMap::map($request->tools());
-        }
-
-        return Arr::whereNotNull([
-            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-            'tools' => $tools !== [] ? $tools : null,
-            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-            'safetySettings' => $providerOptions['safetySettings'] ?? null,
-        ]);
+        return $this->textHandler->buildPayload($request);
     }
 
     /**
      * Convert a StructuredRequest to a batch request payload
      *
+     * Delegates to the Structured handler to build the payload
+     *
      * @return array<string, mixed>
      */
     protected function convertStructuredRequestToPayload(StructuredRequest $request): array
     {
-        $providerOptions = $request->providerOptions();
-
-        $thinkingConfig = Arr::whereNotNull([
-            'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
-        ]);
-
-        $generationConfig = Arr::whereNotNull([
-            'response_mime_type' => 'application/json',
-            'response_schema' => (new SchemaMap($request->schema()))->toArray(),
-            'temperature' => $request->temperature(),
-            'topP' => $request->topP(),
-            'maxOutputTokens' => $request->maxTokens(),
-            'thinkingConfig' => $thinkingConfig !== [] ? $thinkingConfig : null,
-        ]);
-
-        if ($request->tools() !== [] && $request->providerTools() !== []) {
-            throw new PrismException('Use of provider tools with custom tools is not currently supported by Gemini.');
-        }
-
-        $tools = [];
-
-        if ($request->providerTools() !== []) {
-            $tools = [
-                Arr::mapWithKeys(
-                    $request->providerTools(),
-                    fn (ProviderTool $providerTool): array => [$providerTool->type => (object) []]
-                ),
-            ];
-        }
-
-        if ($request->tools() !== []) {
-            $tools = [
-                [
-                    'function_declarations' => ToolMap::map($request->tools()),
-                ],
-            ];
-        }
-
-        return Arr::whereNotNull([
-            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-            'tools' => $tools !== [] ? $tools : null,
-            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-            'safetySettings' => $providerOptions['safetySettings'] ?? null,
-        ]);
+        return $this->structuredHandler->buildPayload($request);
     }
 }
