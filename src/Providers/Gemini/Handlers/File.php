@@ -49,6 +49,7 @@ class File
         }
 
         // Upload the actual file content using the full upload URL
+        // Note: Do NOT set Content-Type here - it was already specified in X-Goog-Upload-Header-Content-Type
         $fileContent = file_get_contents($filePath);
 
         $finalizeResponse = \Illuminate\Support\Facades\Http::withHeaders([
@@ -57,7 +58,7 @@ class File
             'X-Goog-Upload-Command' => 'upload, finalize',
             'x-goog-api-key' => $this->apiKey,
         ])
-            ->withBody($fileContent, $detectedMimeType)
+            ->withBody($fileContent)
             ->post($uploadUrl);
 
         if (! $finalizeResponse->successful()) {
