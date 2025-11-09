@@ -302,6 +302,26 @@ class Gemini extends Provider
     }
 
     /**
+     * Convert Prism requests to JSONL format
+     *
+     * @param  array<\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request>  $requests  Array of TextRequest or StructuredRequest objects
+     * @return string JSONL content
+     *
+     * @throws PrismException if any request is missing a batch key
+     */
+    public function convertRequestsToJsonl(array $requests): string
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $batchHandler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        return $batchHandler->convertRequestsToJsonl($requests);
+    }
+
+    /**
      * Get batch job status and details
      */
     public function getBatch(string $batchName): GeminiBatchJob
