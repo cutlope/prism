@@ -548,7 +548,7 @@ This method:
 5. Creates the batch job using the uploaded file
 6. Cleans up the temporary file
 
-If you don't specify batch keys with `withBatchKey()`, automatic keys will be generated (`request-0`, `request-1`, etc.).
+If you don't specify batch keys with `withBatchKey()`, keys are simply omitted for inline batches.
 
 This is particularly useful when you have:
 - Hundreds or thousands of requests
