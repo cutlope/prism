@@ -57,7 +57,7 @@ class File
             'X-Goog-Upload-Command' => 'upload, finalize',
             'x-goog-api-key' => $this->apiKey,
         ])
-            ->withBody($fileContent, $detectedMimeType)
+            ->withBody($fileContent)
             ->post($uploadUrl);
 
         if (! $finalizeResponse->successful()) {
