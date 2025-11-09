@@ -710,9 +710,9 @@ while (!$batch->isCompleted() && !$batch->isFailed()) {
     $batch = $provider->getBatch($batchName);
 }
 
-if ($batch->isCompleted() && $batch->outputUri) {
+if ($batch->isCompleted() && $batch->outputFileUri) {
     // Parse the results
-    $results = $provider->getBatchResults($batch->outputUri);
+    $results = $provider->getBatchResults($batch->outputFileUri);
 
     // Results are keyed by the request keys you specified
     foreach ($results as $key => $result) {
