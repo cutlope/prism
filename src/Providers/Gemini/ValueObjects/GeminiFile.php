@@ -33,7 +33,7 @@ readonly class GeminiFile
             name: data_get($response, 'name', ''),
             displayName: data_get($response, 'displayName', ''),
             mimeType: data_get($response, 'mimeType', ''),
-            sizeBytes: data_get($response, 'sizeBytes', 0),
+            sizeBytes: (int) data_get($response, 'sizeBytes', 0),
             createTime: Carbon::parse(data_get($response, 'createTime')),
             updateTime: Carbon::parse(data_get($response, 'updateTime')),
             expirationTime: Carbon::parse(data_get($response, 'expirationTime')),
