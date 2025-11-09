@@ -142,7 +142,7 @@ class Batch
         $results = [];
 
         foreach ($lines as $line) {
-            if (in_array(trim($line), ['', '0'], true)) {
+            if (trim($line) === '') {
                 continue;
             }
 
