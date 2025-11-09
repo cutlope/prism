@@ -145,7 +145,7 @@ class Gemini extends Provider
     public function uploadFile(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
     {
         $handler = new File(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com')
         );
 
         try {
@@ -161,7 +161,7 @@ class Gemini extends Provider
     public function getFile(string $fileName): GeminiFile
     {
         $handler = new File(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com')
         );
 
         try {
@@ -179,7 +179,7 @@ class Gemini extends Provider
     public function listFiles(int $pageSize = 100): array
     {
         $handler = new File(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com')
         );
 
         try {
@@ -195,7 +195,7 @@ class Gemini extends Provider
     public function deleteFile(string $fileName): bool
     {
         $handler = new File(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com')
         );
 
         try {
