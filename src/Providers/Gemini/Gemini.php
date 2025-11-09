@@ -402,8 +402,11 @@ class Gemini extends Provider
     /**
      * Get and parse batch results from output file, inline responses, or batch job object
      *
+     * For file-based batches: Returns an associative array keyed by batch key
+     * For inline batches: Returns an indexed array in API order
+     *
      * @param  string|array<int, array<string, mixed>>|GeminiBatchJob  $source  Output file URI, inline responses array, or batch job object
-     * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
+     * @return array<string|int, array<string, mixed>> File-based: keyed array, Inline: indexed array
      */
     public function getBatchResults(string|array|GeminiBatchJob $source): array
     {
