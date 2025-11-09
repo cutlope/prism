@@ -49,7 +49,6 @@ class File
         }
 
         // Upload the actual file content using the full upload URL
-        // Note: Do NOT set Content-Type here - it was already specified in X-Goog-Upload-Header-Content-Type
         $fileContent = file_get_contents($filePath);
 
         $finalizeResponse = \Illuminate\Support\Facades\Http::withHeaders([
