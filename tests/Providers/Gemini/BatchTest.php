@@ -224,7 +224,7 @@ it('handles requests without batch keys (keys are optional for inline batches)',
     expect($batchJob->state)->toBe('JOB_STATE_PENDING');
 });
 
-it('can parse batch results from output file (file-based batches return keyed array)', function (): void {
+it('can parse batch results from output file (returns indexed array)', function (): void {
     FixtureResponse::fakeResponseSequence('*', 'gemini/batch-output-results');
 
     /** @var Gemini */
@@ -232,26 +232,30 @@ it('can parse batch results from output file (file-based batches return keyed ar
 
     $results = $provider->getBatchResults('https://generativelanguage.googleapis.com/v1beta/files/output-123');
 
-    // File-based batches return associative array keyed by batch key
-    expect($results)->toHaveKeys(['request-1', 'request-2', 'structured-1']);
+    // File-based batches now return indexed array (same as inline batches)
+    expect($results)->toBeArray();
+    expect($results)->toHaveCount(3);
 
-    // Verify text response
-    expect($results['request-1'])->toHaveKey('success', true);
-    expect($results['request-1'])->toHaveKey('type', 'text');
-    expect($results['request-1'])->toHaveKey('text', 'Paris is the capital of France.');
-    expect($results['request-1'])->toHaveKey('usage');
-    expect($results['request-1']['usage']['promptTokens'])->toBe(15);
-    expect($results['request-1']['usage']['completionTokens'])->toBe(8);
+    // First result - verify it has the batch key included
+    expect($results[0])->toHaveKey('success', true);
+    expect($results[0])->toHaveKey('type', 'text');
+    expect($results[0])->toHaveKey('text', 'Paris is the capital of France.');
+    expect($results[0])->toHaveKey('batchKey', 'request-1');  // Key included in result
+    expect($results[0])->toHaveKey('usage');
+    expect($results[0]['usage']['promptTokens'])->toBe(15);
+    expect($results[0]['usage']['completionTokens'])->toBe(8);
 
-    // Verify cached response
-    expect($results['request-2'])->toHaveKey('success', true);
-    expect($results['request-2']['usage']['cacheReadInputTokens'])->toBe(10);
+    // Second result - verify cached response
+    expect($results[1])->toHaveKey('success', true);
+    expect($results[1])->toHaveKey('batchKey', 'request-2');
+    expect($results[1]['usage']['cacheReadInputTokens'])->toBe(10);
 
-    // Verify structured response
-    expect($results['structured-1'])->toHaveKey('success', true);
-    expect($results['structured-1'])->toHaveKey('type', 'structured');
-    expect($results['structured-1'])->toHaveKey('structured');
-    expect($results['structured-1']['structured'])->toBe(['name' => 'John Doe', 'email' => 'john@example.com']);
+    // Third result - verify structured response
+    expect($results[2])->toHaveKey('success', true);
+    expect($results[2])->toHaveKey('type', 'structured');
+    expect($results[2])->toHaveKey('batchKey', 'structured-1');
+    expect($results[2])->toHaveKey('structured');
+    expect($results[2]['structured'])->toBe(['name' => 'John Doe', 'email' => 'john@example.com']);
 });
 
 it('parses inline batch results as indexed array (no order assumption)', function (): void {
