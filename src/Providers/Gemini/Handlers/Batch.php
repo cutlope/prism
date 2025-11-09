@@ -46,9 +46,8 @@ class Batch
 
         $requestBody = [
             'batch' => Arr::whereNotNull([
-                'displayName' => $displayName ?? 'Prism Batch '.now()->format('Y-m-d H:i:s'),
-                'model' => 'models/'.$model,
-                'inputConfig' => [
+                'display_name' => $displayName ?? 'Prism Batch '.now()->format('Y-m-d H:i:s'),
+                'input_config' => [
                     'requests' => [
                         'requests' => $requestPayloads,
                     ],
@@ -68,10 +67,9 @@ class Batch
     {
         $requestBody = [
             'batch' => Arr::whereNotNull([
-                'displayName' => $displayName ?? 'Prism Batch '.now()->format('Y-m-d H:i:s'),
-                'model' => 'models/'.$model,
-                'inputConfig' => [
-                    'fileName' => $fileName,
+                'display_name' => $displayName ?? 'Prism Batch '.now()->format('Y-m-d H:i:s'),
+                'input_config' => [
+                    'file_name' => $fileName,
                 ],
             ]),
         ];
