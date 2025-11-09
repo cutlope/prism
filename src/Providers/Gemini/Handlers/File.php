@@ -19,6 +19,8 @@ class File
      */
     public function upload(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
     {
+        $detectedMimeType = $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream';
+
         // First, get the upload URL
         $metadata = [
             'file' => Arr::whereNotNull([
@@ -27,10 +29,13 @@ class File
         ];
 
         $uploadResponse = $this->client
-            ->withHeaders(['X-Goog-Upload-Protocol' => 'resumable'])
-            ->withHeader('X-Goog-Upload-Command', 'start')
-            ->withHeader('X-Goog-Upload-Header-Content-Length', (string) filesize($filePath))
-            ->withHeader('X-Goog-Upload-Header-Content-Type', $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream')
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+                'X-Goog-Upload-Protocol' => 'resumable',
+                'X-Goog-Upload-Command' => 'start',
+                'X-Goog-Upload-Header-Content-Length' => (string) filesize($filePath),
+                'X-Goog-Upload-Header-Content-Type' => $detectedMimeType,
+            ])
             ->post('/upload/v1beta/files', $metadata);
 
         $uploadUrl = $uploadResponse->header('X-Goog-Upload-URL');
@@ -44,7 +49,7 @@ class File
                 'X-Goog-Upload-Offset' => '0',
                 'X-Goog-Upload-Command' => 'upload, finalize',
             ])
-            ->withBody($fileContent, $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream')
+            ->withBody($fileContent, $detectedMimeType)
             ->post($uploadUrl);
 
         return GeminiFile::fromResponse($finalizeResponse->json('file'));
