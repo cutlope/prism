@@ -414,7 +414,10 @@ $batch = $provider->createBatchInline(
 
 ### Using Batch Keys
 
-Batch keys allow you to identify specific requests in the batch output. This is useful when you need to match responses to their corresponding requests:
+Batch keys allow you to identify specific requests in the batch output.
+
+- **Inline batches**: Batch keys are optional. If not provided, results are returned as an indexed array in API order.
+- **File-based batches**: Batch keys are required. Results are returned as an associative array keyed by the batch keys.
 
 ```php
 $requests = [
@@ -499,13 +502,6 @@ The JSONL file should contain one request per line. Each line must include a use
 {"key": "request-3", "request": {"contents": [{"parts": [{"text": "What is NLP?"}]}]}}
 ```
 
-You can also include `generation_config` and other request parameters:
-
-```json
-{"key": "creative-story", "request": {"contents": [{"parts": [{"text": "Write a story about a dragon"}]}], "generation_config": {"temperature": 0.9}}}
-{"key": "technical-doc", "request": {"contents": [{"parts": [{"text": "Explain quantum computing"}]}], "generation_config": {"temperature": 0.3}}}
-```
-
 The maximum allowed file size is 2GB.
 
 ### Automatic JSONL Generation from Prism Requests
@@ -548,7 +544,7 @@ This method:
 5. Creates the batch job using the uploaded file
 6. Cleans up the temporary file
 
-If you don't specify batch keys with `withBatchKey()`, keys are simply omitted for inline batches.
+**Important:** All requests must have batch keys specified via `withBatchKey()`. This is required for file-based batches.
 
 This is particularly useful when you have:
 - Hundreds or thousands of requests
@@ -699,7 +695,12 @@ $provider->deleteBatch($batch->name);
 
 ### Parsing Batch Results
 
-Once a batch job is completed, you can parse the results from the output file:
+Once a batch job is completed, you can parse the results. The format differs between inline and file-based batches:
+
+- **File-based batches**: Results are returned as an associative array keyed by batch keys
+- **Inline batches**: Results are returned as an indexed array in API order
+
+#### Parsing File-Based Batch Results
 
 ```php
 // Wait for batch to complete
@@ -711,10 +712,10 @@ while (!$batch->isCompleted() && !$batch->isFailed()) {
 }
 
 if ($batch->isCompleted() && $batch->outputFileUri) {
-    // Parse the results
+    // Parse the results - returns associative array keyed by batch keys
     $results = $provider->getBatchResults($batch->outputFileUri);
 
-    // Results are keyed by the request keys you specified
+    // Access results by their batch keys
     foreach ($results as $key => $result) {
         if ($result['success']) {
             echo "Request {$key}:\n";
@@ -757,20 +758,20 @@ The parsed results contain:
 - `meta`: Additional metadata (e.g., response ID)
 - `error`: Error information (only if `success` is `false`)
 
-Example with batch keys:
+#### Parsing Inline Batch Results
+
+For inline batches, results are returned as an indexed array in API order:
 
 ```php
 $requests = [
     Prism::text()
         ->using(Provider::Gemini, 'gemini-1.5-flash')
         ->withPrompt('What is the capital of France?')
-        ->withBatchKey('france')
         ->toRequest(),
 
     Prism::text()
         ->using(Provider::Gemini, 'gemini-1.5-flash')
         ->withPrompt('What is the capital of Spain?')
-        ->withBatchKey('spain')
         ->toRequest(),
 ];
 
@@ -778,24 +779,22 @@ $batch = $provider->createBatchInline('gemini-1.5-flash', $requests);
 
 // ... wait for completion ...
 
-$results = $provider->getBatchResults($batch->outputFileUri);
+$batch = $provider->getBatch($batch->name);
 
-// Access results by key
-echo $results['france']['text'];  // "Paris is the capital of France."
-echo $results['spain']['text'];   // "Madrid is the capital of Spain."
+if ($batch->isCompleted() && $batch->inlineResponses) {
+    // Parse inline results - returns indexed array in API order
+    $results = $provider->getBatchResults($batch->inlineResponses);
+
+    // Access results by index
+    echo $results[0]['text'];  // "Paris is the capital of France."
+    echo $results[1]['text'];  // "Madrid is the capital of Spain."
+
+    // If batch keys were provided, they're included in each result
+    if (isset($results[0]['batchKey'])) {
+        echo "Key: " . $results[0]['batchKey'];
+    }
+}
 ```
-
-### Batch API Best Practices
-
-1. **Use caching for repeated context**: When multiple requests share the same large context (documents, system prompts), create a cached content object first.
-
-2. **Batch size**: There's no hard limit, but consider breaking very large batches (1000+ requests) into smaller batches for better monitoring.
-
-3. **Monitor job status**: Batch jobs are asynchronous. Poll the job status periodically to know when results are ready.
-
-4. **Cost optimization**: Combining batching (50% discount) with caching can reduce costs by 80-90% for certain workloads.
-
-5. **File-based batches**: For batches with thousands of requests, use file-based batching instead of inline requests.
 
 ## Embeddings
 
