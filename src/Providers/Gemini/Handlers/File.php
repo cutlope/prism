@@ -60,7 +60,7 @@ class File
         // Ensure fileName has the correct format
         $fileName = str_starts_with($fileName, 'files/') ? $fileName : "files/{$fileName}";
 
-        $response = $this->client->get("/{$fileName}");
+        $response = $this->client->get($fileName);
 
         return GeminiFile::fromResponse($response->json());
     }
@@ -72,7 +72,7 @@ class File
      */
     public function list(int $pageSize = 100): array
     {
-        $response = $this->client->get('/files', [
+        $response = $this->client->get('files', [
             'pageSize' => $pageSize,
         ]);
 
@@ -94,7 +94,7 @@ class File
         // Ensure fileName has the correct format
         $fileName = str_starts_with($fileName, 'files/') ? $fileName : "files/{$fileName}";
 
-        $response = $this->client->delete("/{$fileName}");
+        $response = $this->client->delete($fileName);
 
         return $response->successful();
     }

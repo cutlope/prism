@@ -182,7 +182,7 @@ class Batch
      */
     public function get(string $batchName): GeminiBatchJob
     {
-        $response = $this->client->get("/{$batchName}");
+        $response = $this->client->get($batchName);
 
         return GeminiBatchJob::fromResponse($response->json());
     }
@@ -194,7 +194,7 @@ class Batch
      */
     public function list(int $pageSize = 100): array
     {
-        $response = $this->client->get('/batches', [
+        $response = $this->client->get('batches', [
             'pageSize' => $pageSize,
         ]);
 
@@ -211,7 +211,7 @@ class Batch
      */
     public function cancel(string $batchName): GeminiBatchJob
     {
-        $response = $this->client->post("/{$batchName}:cancel");
+        $response = $this->client->post("{$batchName}:cancel");
 
         return GeminiBatchJob::fromResponse($response->json());
     }
@@ -221,10 +221,11 @@ class Batch
      */
     public function delete(string $batchName): bool
     {
-        $response = $this->client->delete("/{$batchName}");
+        $response = $this->client->delete($batchName);
 
         return $response->successful();
     }
+
     /**
      * Parse inline batch responses
      *
