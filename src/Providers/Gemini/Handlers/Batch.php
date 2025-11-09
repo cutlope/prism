@@ -87,7 +87,7 @@ class Batch
     /**
      * Convert Prism requests to JSONL format
      *
-     * Keys are optional - only included if user explicitly provides them via withBatchKey()
+     * For file-based batches, keys are required. Auto-generates keys if not provided.
      *
      * @param  array<TextRequest|StructuredRequest>  $requests  Array of TextRequest or StructuredRequest objects
      * @return string JSONL content
@@ -96,18 +96,18 @@ class Batch
     {
         $jsonlLines = [];
 
-        foreach ($requests as $request) {
+        foreach ($requests as $index => $request) {
             $payload = match (true) {
                 $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
                 $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
                 default => throw new PrismException('Invalid request type. Only TextRequest and StructuredRequest are supported.'),
             };
 
-            // Only include key if user explicitly provided one
-            $line = Arr::whereNotNull([
-                'key' => $request->batchKey(),
+            // For file-based batches, keys are required - auto-generate if not provided
+            $line = [
+                'key' => $request->batchKey() ?? "request-{$index}",
                 'request' => $payload,
-            ]);
+            ];
 
             $jsonlLines[] = json_encode($line);
         }
@@ -118,11 +118,11 @@ class Batch
     /**
      * Parse batch results from output file or inline responses
      *
-     * Returns indexed array in the order provided by the API for both file-based and inline batches.
-     * Keys are optional - if provided, they're included in each result under 'batchKey'.
+     * For file-based batches: Returns array keyed by batch key (keys are required)
+     * For inline batches: Returns indexed array in API order (keys are optional)
      *
      * @param  string|array<int, array<string, mixed>>|null  $source  Output file URI or inline responses array
-     * @return array<int, array<string, mixed>> Indexed array in API order
+     * @return array<string|int, array<string, mixed>> File-based: keyed array, Inline: indexed array
      */
     public function getBatchResults(string|array|null $source): array
     {
@@ -156,19 +156,18 @@ class Batch
             if (! $entry) {
                 continue;
             }
+            if (! isset($entry['key'])) {
+                continue;
+            }
             if (! isset($entry['response'])) {
                 continue;
             }
 
+            $key = $entry['key'];
             $responseData = $entry['response'];
-            $parsed = $this->parseResponseData($responseData);
 
-            // Include batch key in result if it was provided
-            if (isset($entry['key'])) {
-                $parsed['batchKey'] = $entry['key'];
-            }
-
-            $results[] = $parsed;
+            // File-based batches return keyed array
+            $results[$key] = $this->parseResponseData($responseData);
         }
 
         return $results;
