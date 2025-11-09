@@ -665,8 +665,8 @@ if ($batch->isCompleted()) {
     echo "Batch has finished successfully!";
 
     // Download results from the output URI
-    if ($batch->outputUri) {
-        echo "Results available at: {$batch->outputUri}";
+    if ($batch->outputFileUri) {
+        echo "Results available at: {$batch->outputFileUri}";
     }
 }
 
