@@ -22,10 +22,9 @@ class File
     {
         $detectedMimeType = $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream';
 
-        // Google's API uses short-form MIME types for some formats
-        // See: https://ai.google.dev/gemini-api/docs/batch-api
         if ($detectedMimeType === 'application/jsonl') {
-            $detectedMimeType = 'jsonl';
+            // Temp fix - https://github.com/googleapis/python-genai/issues/1590
+            $detectedMimeType = 'application/json';
         }
 
         $fileName = basename($filePath);
