@@ -12,6 +12,7 @@ class File
 {
     public function __construct(
         protected PendingRequest $client,
+        protected string $apiKey,
     ) {}
 
     /**
@@ -54,11 +55,26 @@ class File
             'Content-Length' => (string) strlen($fileContent),
             'X-Goog-Upload-Offset' => '0',
             'X-Goog-Upload-Command' => 'upload, finalize',
+            'x-goog-api-key' => $this->apiKey,
         ])
             ->withBody($fileContent, $detectedMimeType)
             ->post($uploadUrl);
 
-        return GeminiFile::fromResponse($finalizeResponse->json('file'));
+        if (! $finalizeResponse->successful()) {
+            throw new \RuntimeException(
+                'File upload failed: '.$finalizeResponse->body()
+            );
+        }
+
+        $fileData = $finalizeResponse->json('file');
+
+        if ($fileData === null) {
+            throw new \RuntimeException(
+                'Invalid response from file upload: '.$finalizeResponse->body()
+            );
+        }
+
+        return GeminiFile::fromResponse($fileData);
     }
 
     /**
