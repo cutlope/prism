@@ -254,7 +254,7 @@ it('can parse batch results from output file (file-based batches return keyed ar
     expect($results['structured-1']['structured'])->toBe(['name' => 'John Doe', 'email' => 'john@example.com']);
 });
 
-it('parses inline batch results as indexed array in request order', function (): void {
+it('parses inline batch results as indexed array (no order assumption)', function (): void {
     /** @var Gemini */
     $provider = Prism::provider(Provider::Gemini);
 
@@ -289,7 +289,7 @@ it('parses inline batch results as indexed array in request order', function ():
 
     $results = $provider->getBatchResults($inlineResponses);
 
-    // Inline batches return indexed array in request order
+    // Inline batches return indexed array in the order the API provides them
     expect($results)->toBeArray();
     expect($results)->toHaveCount(3);
 

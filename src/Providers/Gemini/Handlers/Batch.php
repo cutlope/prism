@@ -117,10 +117,10 @@ class Batch
      * Parse batch results from output file or inline responses
      *
      * For file-based batches: Returns array keyed by batch key (keys are required in files)
-     * For inline batches: Returns indexed array in request order (keys are optional)
+     * For inline batches: Returns indexed array in the order provided by the API (keys are optional)
      *
      * @param  string|array<int, array<string, mixed>>|null  $source  Output file URI or inline responses array
-     * @return array<string|int, array<string, mixed>> File-based: keyed by batch key, Inline: indexed by position
+     * @return array<string|int, array<string, mixed>> File-based: keyed by batch key, Inline: indexed array
      */
     public function getBatchResults(string|array|null $source): array
     {
@@ -222,8 +222,8 @@ class Batch
     /**
      * Parse inline batch responses
      *
-     * Returns results in the same order as the original requests.
-     * If user provided explicit batch keys, they are included in each result under 'batchKey'.
+     * Returns responses as an indexed array in the order provided by the API.
+     * If explicit batch keys were provided, they are included in each result under 'batchKey'.
      *
      * @param  array<int, array<string, mixed>>  $inlineResponses
      * @return array<int, array<string, mixed>>
