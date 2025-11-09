@@ -55,6 +55,18 @@ class Batch
             ]),
         ];
 
+        // Check if total request size exceeds 20MB limit for inline batches
+        $requestSize = strlen(json_encode($requestBody));
+        $maxSize = 20 * 1024 * 1024; // 20MB in bytes
+
+        if ($requestSize > $maxSize) {
+            $sizeMB = round($requestSize / (1024 * 1024), 2);
+            throw new PrismException(
+                "Inline batch request size ({$sizeMB}MB) exceeds the 20MB limit. ".
+                'Use createBatchFromFile() or createBatchFromRequests() for larger batches.'
+            );
+        }
+
         $response = $this->client->post("models/{$model}:batchGenerateContent", $requestBody);
 
         return GeminiBatchJob::fromResponse($response->json());
