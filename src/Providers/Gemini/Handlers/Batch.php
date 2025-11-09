@@ -30,21 +30,23 @@ class Batch
     public function createInline(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
     {
         // Convert TextRequest and StructuredRequest objects to request payloads
-        $requestPayloads = array_map(
-            fn (array|\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request $request): array => Arr::whereNotNull([
+        $requestPayloads = [];
+        foreach ($requests as $index => $request) {
+            $key = match (true) {
+                $request instanceof TextRequest => $request->batchKey() ?? "request-{$index}",
+                $request instanceof StructuredRequest => $request->batchKey() ?? "request-{$index}",
+                default => "request-{$index}",
+            };
+
+            $requestPayloads[] = [
                 'request' => match (true) {
                     $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
                     $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
                     default => $request,
                 },
-                'metadata' => match (true) {
-                    $request instanceof TextRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
-                    $request instanceof StructuredRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
-                    default => null,
-                },
-            ]),
-            $requests
-        );
+                'metadata' => ['key' => $key],
+            ];
+        }
 
         $requestBody = [
             'batch' => Arr::whereNotNull([
