@@ -212,8 +212,11 @@ class Gemini extends Provider
      */
     public function createBatchInline(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         try {
@@ -230,8 +233,11 @@ class Gemini extends Provider
      */
     public function createBatchFromFile(string $model, string $fileName, ?string $displayName = null): GeminiBatchJob
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         try {
@@ -248,8 +254,11 @@ class Gemini extends Provider
      */
     public function createBatchFromRequests(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $batchHandler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         // Convert requests to JSONL format
@@ -293,12 +302,35 @@ class Gemini extends Provider
     }
 
     /**
+     * Convert Prism requests to JSONL format
+     *
+     * @param  array<\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request>  $requests  Array of TextRequest or StructuredRequest objects
+     * @return string JSONL content
+     *
+     * @throws PrismException if any request is missing a batch key
+     */
+    public function convertRequestsToJsonl(array $requests): string
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $batchHandler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        return $batchHandler->convertRequestsToJsonl($requests);
+    }
+
+    /**
      * Get batch job status and details
      */
     public function getBatch(string $batchName): GeminiBatchJob
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         try {
@@ -315,8 +347,11 @@ class Gemini extends Provider
      */
     public function listBatches(int $pageSize = 100): array
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         try {
@@ -331,8 +366,11 @@ class Gemini extends Provider
      */
     public function cancelBatch(string $batchName): GeminiBatchJob
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         try {
@@ -347,8 +385,11 @@ class Gemini extends Provider
      */
     public function deleteBatch(string $batchName): bool
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         try {
@@ -361,13 +402,19 @@ class Gemini extends Provider
     /**
      * Get and parse batch results from output file, inline responses, or batch job object
      *
+     * For file-based batches: Returns an associative array keyed by batch key
+     * For inline batches: Returns an indexed array in API order
+     *
      * @param  string|array<int, array<string, mixed>>|GeminiBatchJob  $source  Output file URI, inline responses array, or batch job object
-     * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
+     * @return array<string|int, array<string, mixed>> File-based: keyed array, Inline: indexed array
      */
     public function getBatchResults(string|array|GeminiBatchJob $source): array
     {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
         $handler = new Batch(
-            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
         );
 
         // If given a GeminiBatchJob, extract the appropriate source

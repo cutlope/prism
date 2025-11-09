@@ -7,19 +7,16 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
 use Prism\Prism\Exceptions\PrismException;
-use Prism\Prism\Providers\Gemini\Maps\MessageMap;
-use Prism\Prism\Providers\Gemini\Maps\SchemaMap;
-use Prism\Prism\Providers\Gemini\Maps\ToolChoiceMap;
-use Prism\Prism\Providers\Gemini\Maps\ToolMap;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiBatchJob;
 use Prism\Prism\Structured\Request as StructuredRequest;
 use Prism\Prism\Text\Request as TextRequest;
-use Prism\Prism\ValueObjects\ProviderTool;
 
 class Batch
 {
     public function __construct(
         protected PendingRequest $client,
+        protected Text $textHandler,
+        protected Structured $structuredHandler,
     ) {}
 
     /**
@@ -37,6 +34,7 @@ class Batch
                     $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
                     default => $request,
                 },
+                // Only include metadata if user explicitly provided a batch key
                 'metadata' => match (true) {
                     $request instanceof TextRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
                     $request instanceof StructuredRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
@@ -86,8 +84,12 @@ class Batch
     /**
      * Convert Prism requests to JSONL format
      *
+     * For file-based batches, keys are required. User must provide keys via withBatchKey().
+     *
      * @param  array<TextRequest|StructuredRequest>  $requests  Array of TextRequest or StructuredRequest objects
      * @return string JSONL content
+     *
+     * @throws PrismException if any request is missing a batch key
      */
     public function convertRequestsToJsonl(array $requests): string
     {
@@ -100,9 +102,14 @@ class Batch
                 default => throw new PrismException('Invalid request type. Only TextRequest and StructuredRequest are supported.'),
             };
 
-            // For file-based batches, use top-level "key" field (different from inline batches)
+            // For file-based batches, keys are required - throw error if not provided
+            $key = $request->batchKey();
+            if ($key === null) {
+                throw new PrismException("Batch key is required for file-based batches. Request at index {$index} is missing a batch key. Use withBatchKey() to provide one.");
+            }
+
             $line = [
-                'key' => $request->batchKey() ?? "request-{$index}",
+                'key' => $key,
                 'request' => $payload,
             ];
 
@@ -115,8 +122,11 @@ class Batch
     /**
      * Parse batch results from output file or inline responses
      *
+     * For file-based batches: Returns array keyed by batch key (keys are required)
+     * For inline batches: Returns indexed array in API order (keys are optional)
+     *
      * @param  string|array<int, array<string, mixed>>|null  $source  Output file URI or inline responses array
-     * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
+     * @return array<string|int, array<string, mixed>> File-based: keyed array, Inline: indexed array
      */
     public function getBatchResults(string|array|null $source): array
     {
@@ -160,7 +170,7 @@ class Batch
             $key = $entry['key'];
             $responseData = $entry['response'];
 
-            // Parse the response data into a structured format
+            // File-based batches return keyed array
             $results[$key] = $this->parseResponseData($responseData);
         }
 
@@ -218,22 +228,26 @@ class Batch
     /**
      * Parse inline batch responses
      *
+     * Returns responses as an indexed array in the order provided by the API.
+     * If explicit batch keys were provided, they are included in each result under 'batchKey'.
+     *
      * @param  array<int, array<string, mixed>>  $inlineResponses
-     * @return array<string, array<string, mixed>>
+     * @return array<int, array<string, mixed>>
      */
     protected function parseInlineResponses(array $inlineResponses): array
     {
         $results = [];
 
         foreach ($inlineResponses as $entry) {
-            if (! isset($entry['metadata']['key'])) {
-                continue;
+            $responseData = $entry['response'] ?? $entry;
+            $parsed = $this->parseResponseData($responseData);
+
+            // Include batch key in result if it was provided
+            if (isset($entry['metadata']['key'])) {
+                $parsed['batchKey'] = $entry['metadata']['key'];
             }
 
-            $key = $entry['metadata']['key'];
-            $responseData = $entry['response'] ?? $entry;
-
-            $results[$key] = $this->parseResponseData($responseData);
+            $results[] = $parsed;
         }
 
         return $results;
@@ -312,104 +326,24 @@ class Batch
     /**
      * Convert a TextRequest to a batch request payload
      *
+     * Delegates to the Text handler to build the payload
+     *
      * @return array<string, mixed>
      */
     protected function convertTextRequestToPayload(TextRequest $request): array
     {
-        $providerOptions = $request->providerOptions();
-
-        $thinkingConfig = Arr::whereNotNull([
-            'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
-        ]);
-
-        $generationConfig = Arr::whereNotNull([
-            'temperature' => $request->temperature(),
-            'topP' => $request->topP(),
-            'maxOutputTokens' => $request->maxTokens(),
-            'thinkingConfig' => $thinkingConfig !== [] ? $thinkingConfig : null,
-        ]);
-
-        if ($request->tools() !== [] && $request->providerTools() !== []) {
-            throw new PrismException('Use of provider tools with custom tools is not currently supported by Gemini.');
-        }
-
-        $tools = [];
-
-        if ($request->providerTools() !== []) {
-            $tools = [
-                Arr::mapWithKeys(
-                    $request->providerTools(),
-                    fn (ProviderTool $providerTool): array => [$providerTool->type => (object) []]
-                ),
-            ];
-        }
-
-        if ($request->tools() !== []) {
-            $tools['function_declarations'] = ToolMap::map($request->tools());
-        }
-
-        return Arr::whereNotNull([
-            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-            'tools' => $tools !== [] ? $tools : null,
-            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-            'safetySettings' => $providerOptions['safetySettings'] ?? null,
-        ]);
+        return $this->textHandler->buildPayload($request);
     }
 
     /**
      * Convert a StructuredRequest to a batch request payload
      *
+     * Delegates to the Structured handler to build the payload
+     *
      * @return array<string, mixed>
      */
     protected function convertStructuredRequestToPayload(StructuredRequest $request): array
     {
-        $providerOptions = $request->providerOptions();
-
-        $thinkingConfig = Arr::whereNotNull([
-            'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
-        ]);
-
-        $generationConfig = Arr::whereNotNull([
-            'response_mime_type' => 'application/json',
-            'response_schema' => (new SchemaMap($request->schema()))->toArray(),
-            'temperature' => $request->temperature(),
-            'topP' => $request->topP(),
-            'maxOutputTokens' => $request->maxTokens(),
-            'thinkingConfig' => $thinkingConfig !== [] ? $thinkingConfig : null,
-        ]);
-
-        if ($request->tools() !== [] && $request->providerTools() !== []) {
-            throw new PrismException('Use of provider tools with custom tools is not currently supported by Gemini.');
-        }
-
-        $tools = [];
-
-        if ($request->providerTools() !== []) {
-            $tools = [
-                Arr::mapWithKeys(
-                    $request->providerTools(),
-                    fn (ProviderTool $providerTool): array => [$providerTool->type => (object) []]
-                ),
-            ];
-        }
-
-        if ($request->tools() !== []) {
-            $tools = [
-                [
-                    'function_declarations' => ToolMap::map($request->tools()),
-                ],
-            ];
-        }
-
-        return Arr::whereNotNull([
-            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-            'tools' => $tools !== [] ? $tools : null,
-            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-            'safetySettings' => $providerOptions['safetySettings'] ?? null,
-        ]);
+        return $this->structuredHandler->buildPayload($request);
     }
 }

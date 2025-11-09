@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Providers\Gemini;
 
 use Prism\Prism\Enums\Provider;
+use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\Providers\Gemini\Gemini;
 use Prism\Prism\Schema\ObjectSchema;
@@ -194,7 +195,37 @@ it('can create batch job with custom batch keys', function (): void {
     expect($requests[1]->batchKey())->toBe('spain-capital');
 });
 
-it('can parse batch results from output file', function (): void {
+it('handles requests without batch keys (keys are optional for inline batches)', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/batch-create-inline');
+
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    // Mix of requests with and without explicit keys
+    $requests = [
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Request with explicit key')
+            ->withBatchKey('custom-key')
+            ->toRequest(),
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Request without key')
+            ->toRequest(),  // No key - this is fine for inline batches
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Another without key')
+            ->toRequest(),  // No key - also fine
+    ];
+
+    $batchJob = $provider->createBatchInline('gemini-1.5-flash-002', $requests);
+
+    expect($batchJob->name)->toBe('batches/batch-job-123');
+    expect($batchJob->model)->toBe('models/gemini-1.5-flash-002');
+    expect($batchJob->state)->toBe('JOB_STATE_PENDING');
+});
+
+it('can parse batch results from output file (file-based batches return keyed array)', function (): void {
     FixtureResponse::fakeResponseSequence('*', 'gemini/batch-output-results');
 
     /** @var Gemini */
@@ -202,24 +233,108 @@ it('can parse batch results from output file', function (): void {
 
     $results = $provider->getBatchResults('https://generativelanguage.googleapis.com/v1beta/files/output-123');
 
-    // Verify all results are present
+    // File-based batches return keyed array (keys are required for JSONL files)
     expect($results)->toHaveKeys(['request-1', 'request-2', 'structured-1']);
 
     // Verify text response
-    expect($results['request-1'])->toHaveKey('success', true);
-    expect($results['request-1'])->toHaveKey('type', 'text');
-    expect($results['request-1'])->toHaveKey('text', 'Paris is the capital of France.');
+    expect($results['request-1'])->toHaveKey('success');
+    expect($results['request-1']['success'])->toBe(true);
+    expect($results['request-1'])->toHaveKey('type');
+    expect($results['request-1']['type'])->toBe('text');
+    expect($results['request-1'])->toHaveKey('text');
+    expect($results['request-1']['text'])->toBe('Paris is the capital of France.');
     expect($results['request-1'])->toHaveKey('usage');
     expect($results['request-1']['usage']['promptTokens'])->toBe(15);
     expect($results['request-1']['usage']['completionTokens'])->toBe(8);
 
     // Verify cached response
-    expect($results['request-2'])->toHaveKey('success', true);
+    expect($results['request-2'])->toHaveKey('success');
+    expect($results['request-2']['success'])->toBe(true);
     expect($results['request-2']['usage']['cacheReadInputTokens'])->toBe(10);
 
     // Verify structured response
-    expect($results['structured-1'])->toHaveKey('success', true);
-    expect($results['structured-1'])->toHaveKey('type', 'structured');
+    expect($results['structured-1'])->toHaveKey('success');
+    expect($results['structured-1']['success'])->toBe(true);
+    expect($results['structured-1'])->toHaveKey('type');
+    expect($results['structured-1']['type'])->toBe('structured');
     expect($results['structured-1'])->toHaveKey('structured');
     expect($results['structured-1']['structured'])->toBe(['name' => 'John Doe', 'email' => 'john@example.com']);
+});
+
+it('parses inline batch results as indexed array (no order assumption)', function (): void {
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    // Simulate inline batch responses
+    $inlineResponses = [
+        [
+            'metadata' => ['key' => 'custom-key'],
+            'response' => [
+                'candidates' => [
+                    ['content' => ['parts' => [['text' => 'Response 1']]], 'finishReason' => 'STOP'],
+                ],
+                'usageMetadata' => ['promptTokenCount' => 10, 'candidatesTokenCount' => 5, 'totalTokenCount' => 15],
+            ],
+        ],
+        [
+            'response' => [  // No metadata - no explicit key
+                'candidates' => [
+                    ['content' => ['parts' => [['text' => 'Response 2']]], 'finishReason' => 'STOP'],
+                ],
+                'usageMetadata' => ['promptTokenCount' => 8, 'candidatesTokenCount' => 4, 'totalTokenCount' => 12],
+            ],
+        ],
+        [
+            'response' => [  // No metadata - no explicit key
+                'candidates' => [
+                    ['content' => ['parts' => [['text' => 'Response 3']]], 'finishReason' => 'STOP'],
+                ],
+                'usageMetadata' => ['promptTokenCount' => 12, 'candidatesTokenCount' => 6, 'totalTokenCount' => 18],
+            ],
+        ],
+    ];
+
+    $results = $provider->getBatchResults($inlineResponses);
+
+    // Inline batches return indexed array in the order the API provides them
+    expect($results)->toBeArray();
+    expect($results)->toHaveCount(3);
+
+    // First result has explicit key
+    expect($results[0])->toHaveKey('text');
+    expect($results[0]['text'])->toBe('Response 1');
+    expect($results[0])->toHaveKey('batchKey');
+    expect($results[0]['batchKey'])->toBe('custom-key');  // Key is included in result
+    expect($results[0]['usage']['totalTokens'])->toBe(15);
+
+    // Second and third results have no keys (keys are optional)
+    expect($results[1])->toHaveKey('text');
+    expect($results[1]['text'])->toBe('Response 2');
+    expect($results[1])->not->toHaveKey('batchKey');  // No key in result
+    expect($results[1]['usage']['totalTokens'])->toBe(12);
+
+    expect($results[2])->toHaveKey('text');
+    expect($results[2]['text'])->toBe('Response 3');
+    expect($results[2])->not->toHaveKey('batchKey');
+    expect($results[2]['usage']['totalTokens'])->toBe(18);
+});
+
+it('throws error when converting requests to JSONL without batch keys', function (): void {
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $requests = [
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Request with key')
+            ->withBatchKey('has-key')
+            ->toRequest(),
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Request without key')
+            ->toRequest(),  // Missing key - should throw
+    ];
+
+    expect(fn () => $provider->convertRequestsToJsonl($requests))
+        ->toThrow(PrismException::class, 'Batch key is required for file-based batches. Request at index 1 is missing a batch key.');
 });
