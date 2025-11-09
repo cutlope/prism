@@ -16,6 +16,7 @@ use Prism\Prism\Exceptions\PrismProviderOverloadedException;
 use Prism\Prism\Exceptions\PrismRateLimitedException;
 use Prism\Prism\Images\Request as ImagesRequest;
 use Prism\Prism\Images\Response as ImagesResponse;
+use Prism\Prism\Providers\Gemini\Handlers\Batch;
 use Prism\Prism\Providers\Gemini\Handlers\Cache;
 use Prism\Prism\Providers\Gemini\Handlers\Embeddings;
 use Prism\Prism\Providers\Gemini\Handlers\File;
@@ -23,6 +24,7 @@ use Prism\Prism\Providers\Gemini\Handlers\Images;
 use Prism\Prism\Providers\Gemini\Handlers\Stream;
 use Prism\Prism\Providers\Gemini\Handlers\Structured;
 use Prism\Prism\Providers\Gemini\Handlers\Text;
+use Prism\Prism\Providers\Gemini\ValueObjects\GeminiBatchJob;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiCachedObject;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiFile;
 use Prism\Prism\Providers\Provider;
@@ -200,6 +202,230 @@ class Gemini extends Provider
             return $handler->delete($fileName);
         } catch (RequestException $e) {
             throw PrismException::providerRequestError('file-delete', $e);
+        }
+    }
+
+    /**
+     * Create a batch job with inline requests
+     *
+     * @param  array<TextRequest|StructuredRequest|array<string, mixed>>  $requests  Array of TextRequest, StructuredRequest objects or request payloads
+     */
+    public function createBatchInline(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        try {
+            return $handler->createInline($model, $requests, $displayName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-create', $e);
+        }
+    }
+
+    /**
+     * Create a batch job from a JSONL file
+     *
+     * @param  string  $fileName  The file name/ID from Files API (e.g., 'files/abc123')
+     */
+    public function createBatchFromFile(string $model, string $fileName, ?string $displayName = null): GeminiBatchJob
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        try {
+            return $handler->createFromFile($model, $fileName, $displayName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-create-file', $e);
+        }
+    }
+
+    /**
+     * Create a batch job from Prism requests (automatically generates and uploads JSONL file)
+     *
+     * @param  array<\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request>  $requests  Array of TextRequest or StructuredRequest objects
+     */
+    public function createBatchFromRequests(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $batchHandler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        // Convert requests to JSONL format
+        $jsonlContent = $batchHandler->convertRequestsToJsonl($requests);
+
+        // Save JSONL to a temporary file
+        $tempFile = tempnam(sys_get_temp_dir(), 'prism_batch_');
+        file_put_contents($tempFile, $jsonlContent);
+
+        try {
+            // Upload the JSONL file
+            $file = $this->uploadFile(
+                filePath: $tempFile,
+                displayName: $displayName ?? 'Prism Batch Requests '.now()->format('Y-m-d H:i:s'),
+                mimeType: 'application/jsonl'
+            );
+
+            // Wait for the file to be processed
+            $maxAttempts = 30; // 30 seconds max
+            $attempts = 0;
+            while ($file->isProcessing() && $attempts < $maxAttempts) {
+                sleep(1);
+                $file = $this->getFile($file->name);
+                $attempts++;
+            }
+
+            if ($file->isFailed()) {
+                throw new PrismException('File upload failed during processing');
+            }
+
+            if ($file->isProcessing()) {
+                throw new PrismException('File is still processing after 30 seconds');
+            }
+
+            // Create the batch from the uploaded file
+            return $this->createBatchFromFile($model, $file->name, $displayName);
+        } finally {
+            // Clean up the temporary file
+            @unlink($tempFile);
+        }
+    }
+
+    /**
+     * Convert Prism requests to JSONL format
+     *
+     * @param  array<\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request>  $requests  Array of TextRequest or StructuredRequest objects
+     * @return string JSONL content
+     *
+     * @throws PrismException if any request is missing a batch key
+     */
+    public function convertRequestsToJsonl(array $requests): string
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $batchHandler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        return $batchHandler->convertRequestsToJsonl($requests);
+    }
+
+    /**
+     * Get batch job status and details
+     */
+    public function getBatch(string $batchName): GeminiBatchJob
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        try {
+            return $handler->get($batchName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-get', $e);
+        }
+    }
+
+    /**
+     * List all batch jobs
+     *
+     * @return GeminiBatchJob[]
+     */
+    public function listBatches(int $pageSize = 100): array
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        try {
+            return $handler->list($pageSize);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-list', $e);
+        }
+    }
+
+    /**
+     * Cancel a batch job
+     */
+    public function cancelBatch(string $batchName): GeminiBatchJob
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        try {
+            return $handler->cancel($batchName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-cancel', $e);
+        }
+    }
+
+    /**
+     * Delete a batch job
+     */
+    public function deleteBatch(string $batchName): bool
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        try {
+            return $handler->delete($batchName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-delete', $e);
+        }
+    }
+
+    /**
+     * Get and parse batch results from output file, inline responses, or batch job object
+     *
+     * For file-based batches: Returns an associative array keyed by batch key
+     * For inline batches: Returns an indexed array in API order
+     *
+     * @param  string|array<int, array<string, mixed>>|GeminiBatchJob  $source  Output file URI, inline responses array, or batch job object
+     * @return array<string|int, array<string, mixed>> File-based: keyed array, Inline: indexed array
+     */
+    public function getBatchResults(string|array|GeminiBatchJob $source): array
+    {
+        $client = $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta');
+        $handler = new Batch(
+            $client,
+            new Handlers\Text($client, $this->apiKey),
+            new Handlers\Structured($client)
+        );
+
+        // If given a GeminiBatchJob, extract the appropriate source
+        if ($source instanceof GeminiBatchJob) {
+            $source = $source->inlineResponses ?? $source->outputFileUri;
+        }
+
+        try {
+            return $handler->getBatchResults($source);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('batch-results', $e);
         }
     }
 

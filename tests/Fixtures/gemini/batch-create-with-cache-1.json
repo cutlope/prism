@@ -1,0 +1,10 @@
+{
+  "name": "batches/batch-job-456",
+  "model": "models/gemini-1.5-flash-002",
+  "state": "JOB_STATE_PENDING",
+  "createTime": "2025-03-01T10:00:00.000000Z",
+  "updateTime": "2025-03-01T10:00:00.000000Z",
+  "metadata": {
+    "cachedContent": "cachedContents/kmvaiarhyq2g"
+  }
+}
