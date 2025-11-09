@@ -18,11 +18,13 @@ use Prism\Prism\Images\Request as ImagesRequest;
 use Prism\Prism\Images\Response as ImagesResponse;
 use Prism\Prism\Providers\Gemini\Handlers\Cache;
 use Prism\Prism\Providers\Gemini\Handlers\Embeddings;
+use Prism\Prism\Providers\Gemini\Handlers\File;
 use Prism\Prism\Providers\Gemini\Handlers\Images;
 use Prism\Prism\Providers\Gemini\Handlers\Stream;
 use Prism\Prism\Providers\Gemini\Handlers\Structured;
 use Prism\Prism\Providers\Gemini\Handlers\Text;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiCachedObject;
+use Prism\Prism\Providers\Gemini\ValueObjects\GeminiFile;
 use Prism\Prism\Providers\Provider;
 use Prism\Prism\Structured\Request as StructuredRequest;
 use Prism\Prism\Structured\Response as StructuredResponse;
@@ -132,6 +134,72 @@ class Gemini extends Provider
             return $handler->handle();
         } catch (RequestException $e) {
             $this->handleRequestException($model, $e);
+        }
+    }
+
+    /**
+     * Upload a file to the Gemini Files API
+     */
+    public function uploadFile(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->upload($filePath, $displayName, $mimeType);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-upload', $e);
+        }
+    }
+
+    /**
+     * Get file metadata from the Gemini Files API
+     */
+    public function getFile(string $fileName): GeminiFile
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->get($fileName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-get', $e);
+        }
+    }
+
+    /**
+     * List all files from the Gemini Files API
+     *
+     * @return GeminiFile[]
+     */
+    public function listFiles(int $pageSize = 100): array
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->list($pageSize);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-list', $e);
+        }
+    }
+
+    /**
+     * Delete a file from the Gemini Files API
+     */
+    public function deleteFile(string $fileName): bool
+    {
+        $handler = new File(
+            $this->client(baseUrl: 'https://generativelanguage.googleapis.com/v1beta')
+        );
+
+        try {
+            return $handler->delete($fileName);
+        } catch (RequestException $e) {
+            throw PrismException::providerRequestError('file-delete', $e);
         }
     }
 
