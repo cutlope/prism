@@ -20,11 +20,13 @@ class File
     public function upload(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
     {
         $detectedMimeType = $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream';
+        $fileName = basename($filePath);
+        $fileSize = filesize($filePath);
 
         // First, get the upload URL
         $metadata = [
             'file' => Arr::whereNotNull([
-                'display_name' => $displayName ?? basename($filePath),
+                'display_name' => $displayName ?? $fileName,
             ]),
         ];
 
@@ -33,22 +35,26 @@ class File
                 'Content-Type' => 'application/json',
                 'X-Goog-Upload-Protocol' => 'resumable',
                 'X-Goog-Upload-Command' => 'start',
-                'X-Goog-Upload-Header-Content-Length' => (string) filesize($filePath),
+                'X-Goog-Upload-Header-Content-Length' => (string) $fileSize,
                 'X-Goog-Upload-Header-Content-Type' => $detectedMimeType,
+                'X-Goog-Upload-File-Name' => $fileName,
             ])
-            ->post('/upload/v1beta/files', $metadata);
+            ->post('upload/v1beta/files', $metadata);
 
-        $uploadUrl = $uploadResponse->header('X-Goog-Upload-URL');
+        $uploadUrl = $uploadResponse->header('x-goog-upload-url');
 
-        // Upload the actual file content
+        if (! $uploadUrl) {
+            throw new \RuntimeException('Failed to get upload URL from response headers');
+        }
+
+        // Upload the actual file content using the full upload URL
         $fileContent = file_get_contents($filePath);
 
-        $finalizeResponse = $this->client
-            ->withHeaders([
-                'Content-Length' => (string) strlen($fileContent),
-                'X-Goog-Upload-Offset' => '0',
-                'X-Goog-Upload-Command' => 'upload, finalize',
-            ])
+        $finalizeResponse = \Illuminate\Support\Facades\Http::withHeaders([
+            'Content-Length' => (string) strlen($fileContent),
+            'X-Goog-Upload-Offset' => '0',
+            'X-Goog-Upload-Command' => 'upload, finalize',
+        ])
             ->withBody($fileContent, $detectedMimeType)
             ->post($uploadUrl);
 
@@ -65,7 +71,7 @@ class File
         // Ensure fileName has the correct format
         $fileName = str_starts_with($fileName, 'files/') ? $fileName : "files/{$fileName}";
 
-        $response = $this->client->get($fileName);
+        $response = $this->client->get("v1beta/{$fileName}");
 
         return GeminiFile::fromResponse($response->json());
     }
@@ -77,7 +83,7 @@ class File
      */
     public function list(int $pageSize = 100): array
     {
-        $response = $this->client->get('files', [
+        $response = $this->client->get('v1beta/files', [
             'pageSize' => $pageSize,
         ]);
 
@@ -99,7 +105,7 @@ class File
         // Ensure fileName has the correct format
         $fileName = str_starts_with($fileName, 'files/') ? $fileName : "files/{$fileName}";
 
-        $response = $this->client->delete($fileName);
+        $response = $this->client->delete("v1beta/{$fileName}");
 
         return $response->successful();
     }
