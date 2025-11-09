@@ -778,7 +778,7 @@ $batch = $provider->createBatchInline('gemini-1.5-flash', $requests);
 
 // ... wait for completion ...
 
-$results = $provider->getBatchResults($batch->outputUri);
+$results = $provider->getBatchResults($batch->outputFileUri);
 
 // Access results by key
 echo $results['france']['text'];  // "Paris is the capital of France."
