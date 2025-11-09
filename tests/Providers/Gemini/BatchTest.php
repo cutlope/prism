@@ -295,16 +295,19 @@ it('parses inline batch results as indexed array (no order assumption)', functio
     expect($results)->toHaveCount(3);
 
     // First result has explicit key
-    expect($results[0])->toHaveKey('text', 'Response 1');
+    expect($results[0])->toHaveKey('text');
+    expect($results[0]['text'])->toBe('Response 1');
     expect($results[0])->toHaveKey('batchKey', 'custom-key');  // Key is included in result
     expect($results[0]['usage']['totalTokens'])->toBe(15);
 
     // Second and third results have no keys (keys are optional)
-    expect($results[1])->toHaveKey('text', 'Response 2');
+    expect($results[1])->toHaveKey('text');
+    expect($results[1]['text'])->toBe('Response 2');
     expect($results[1])->not->toHaveKey('batchKey');  // No key in result
     expect($results[1]['usage']['totalTokens'])->toBe(12);
 
-    expect($results[2])->toHaveKey('text', 'Response 3');
+    expect($results[2])->toHaveKey('text');
+    expect($results[2]['text'])->toBe('Response 3');
     expect($results[2])->not->toHaveKey('batchKey');
     expect($results[2]['usage']['totalTokens'])->toBe(18);
 });
