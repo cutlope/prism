@@ -413,7 +413,11 @@ class Batch
         }
 
         if ($request->tools() !== []) {
-            $tools['function_declarations'] = ToolMap::map($request->tools());
+            $tools = [
+                [
+                    'function_declarations' => ToolMap::map($request->tools()),
+                ],
+            ];
         }
 
         return Arr::whereNotNull([
