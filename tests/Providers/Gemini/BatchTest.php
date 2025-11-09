@@ -194,6 +194,35 @@ it('can create batch job with custom batch keys', function (): void {
     expect($requests[1]->batchKey())->toBe('spain-capital');
 });
 
+it('handles mixed explicit and default batch keys without collision', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/batch-create-inline');
+
+    /** @var Gemini */
+    $provider = Prism::provider(Provider::Gemini);
+
+    $requests = [
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Explicit key collision test')
+            ->withBatchKey('request-2')  // Explicit key that matches default pattern
+            ->toRequest(),
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('No explicit key')
+            ->toRequest(),  // Will auto-generate "request-1"
+        Prism::text()
+            ->using(Provider::Gemini, 'gemini-1.5-flash-002')
+            ->withPrompt('Another no key')
+            ->toRequest(),  // Would auto-generate "request-2" but should detect collision
+    ];
+
+    $batchJob = $provider->createBatchInline('gemini-1.5-flash-002', $requests);
+
+    expect($batchJob->name)->toBe('batches/batch-job-123');
+    expect($batchJob->model)->toBe('models/gemini-1.5-flash-002');
+    expect($batchJob->state)->toBe('JOB_STATE_PENDING');
+});
+
 it('can parse batch results from output file', function (): void {
     FixtureResponse::fakeResponseSequence('*', 'gemini/batch-output-results');
 

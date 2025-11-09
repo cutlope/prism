@@ -31,12 +31,30 @@ class Batch
     {
         // Convert TextRequest and StructuredRequest objects to request payloads
         $requestPayloads = [];
+        $usedKeys = [];
+
         foreach ($requests as $index => $request) {
+            // Get the key, either from the request or generate a default
             $key = match (true) {
-                $request instanceof TextRequest => $request->batchKey() ?? "request-{$index}",
-                $request instanceof StructuredRequest => $request->batchKey() ?? "request-{$index}",
-                default => "request-{$index}",
+                $request instanceof TextRequest => $request->batchKey(),
+                $request instanceof StructuredRequest => $request->batchKey(),
+                default => null,
             };
+
+            // If no explicit key, generate a unique default key
+            if ($key === null) {
+                $baseKey = "request-{$index}";
+                $key = $baseKey;
+                $counter = 1;
+
+                // Ensure uniqueness by adding a suffix if needed
+                while (in_array($key, $usedKeys, true)) {
+                    $key = "{$baseKey}-{$counter}";
+                    $counter++;
+                }
+            }
+
+            $usedKeys[] = $key;
 
             $requestPayloads[] = [
                 'request' => match (true) {
