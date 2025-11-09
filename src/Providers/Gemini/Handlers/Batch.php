@@ -30,41 +30,22 @@ class Batch
     public function createInline(string $model, array $requests, ?string $displayName = null): GeminiBatchJob
     {
         // Convert TextRequest and StructuredRequest objects to request payloads
-        $requestPayloads = [];
-        $usedKeys = [];
-
-        foreach ($requests as $index => $request) {
-            // Get the key, either from the request or generate a default
-            $key = match (true) {
-                $request instanceof TextRequest => $request->batchKey(),
-                $request instanceof StructuredRequest => $request->batchKey(),
-                default => null,
-            };
-
-            // If no explicit key, generate a unique default key
-            if ($key === null) {
-                $baseKey = "request-{$index}";
-                $key = $baseKey;
-                $counter = 1;
-
-                // Ensure uniqueness by adding a suffix if needed
-                while (in_array($key, $usedKeys, true)) {
-                    $key = "{$baseKey}-{$counter}";
-                    $counter++;
-                }
-            }
-
-            $usedKeys[] = $key;
-
-            $requestPayloads[] = [
+        $requestPayloads = array_map(
+            fn (array|\Prism\Prism\Text\Request|\Prism\Prism\Structured\Request $request): array => Arr::whereNotNull([
                 'request' => match (true) {
                     $request instanceof TextRequest => $this->convertTextRequestToPayload($request),
                     $request instanceof StructuredRequest => $this->convertStructuredRequestToPayload($request),
                     default => $request,
                 },
-                'metadata' => ['key' => $key],
-            ];
-        }
+                // Only include metadata if user explicitly provided a batch key
+                'metadata' => match (true) {
+                    $request instanceof TextRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
+                    $request instanceof StructuredRequest && $request->batchKey() !== null => ['key' => $request->batchKey()],
+                    default => null,
+                },
+            ]),
+            $requests
+        );
 
         $requestBody = [
             'batch' => Arr::whereNotNull([
@@ -135,8 +116,11 @@ class Batch
     /**
      * Parse batch results from output file or inline responses
      *
+     * For file-based batches: Returns array keyed by batch key (keys are required in files)
+     * For inline batches: Returns indexed array in request order (keys are optional)
+     *
      * @param  string|array<int, array<string, mixed>>|null  $source  Output file URI or inline responses array
-     * @return array<string, array<string, mixed>> Array keyed by request key containing parsed response data
+     * @return array<string|int, array<string, mixed>> File-based: keyed by batch key, Inline: indexed by position
      */
     public function getBatchResults(string|array|null $source): array
     {
@@ -238,22 +222,26 @@ class Batch
     /**
      * Parse inline batch responses
      *
+     * Returns results in the same order as the original requests.
+     * If user provided explicit batch keys, they are included in each result under 'batchKey'.
+     *
      * @param  array<int, array<string, mixed>>  $inlineResponses
-     * @return array<string, array<string, mixed>>
+     * @return array<int, array<string, mixed>>
      */
     protected function parseInlineResponses(array $inlineResponses): array
     {
         $results = [];
 
         foreach ($inlineResponses as $entry) {
-            if (! isset($entry['metadata']['key'])) {
-                continue;
+            $responseData = $entry['response'] ?? $entry;
+            $parsed = $this->parseResponseData($responseData);
+
+            // Include batch key in result if it was provided
+            if (isset($entry['metadata']['key'])) {
+                $parsed['batchKey'] = $entry['metadata']['key'];
             }
 
-            $key = $entry['metadata']['key'];
-            $responseData = $entry['response'] ?? $entry;
-
-            $results[$key] = $this->parseResponseData($responseData);
+            $results[] = $parsed;
         }
 
         return $results;
