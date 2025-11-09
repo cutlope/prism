@@ -21,6 +21,13 @@ class File
     public function upload(string $filePath, ?string $displayName = null, ?string $mimeType = null): GeminiFile
     {
         $detectedMimeType = $mimeType ?? mime_content_type($filePath) ?: 'application/octet-stream';
+
+        // Google's API uses short-form MIME types for some formats
+        // See: https://ai.google.dev/gemini-api/docs/batch-api
+        if ($detectedMimeType === 'application/jsonl') {
+            $detectedMimeType = 'jsonl';
+        }
+
         $fileName = basename($filePath);
         $fileSize = filesize($filePath);
 
