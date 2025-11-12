@@ -52,7 +52,7 @@ class Text
         $isToolCall = ! empty(data_get($data, 'candidates.0.content.parts.0.functionCall'));
 
         $responseMessage = new AssistantMessage(
-            data_get($data, 'candidates.0.content.parts.0.text') ?? '',
+            $this->extractTextContent($data),
             $isToolCall ? ToolCallMap::map(data_get($data, 'candidates.0.content.parts', [])) : [],
         );
 
@@ -74,15 +74,14 @@ class Text
     {
         $providerOptions = $request->providerOptions();
 
-        $thinkingConfig = Arr::whereNotNull([
-            'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
-        ]);
-
         $generationConfig = Arr::whereNotNull([
             'temperature' => $request->temperature(),
             'topP' => $request->topP(),
             'maxOutputTokens' => $request->maxTokens(),
-            'thinkingConfig' => $thinkingConfig !== [] ? $thinkingConfig : null,
+            'thinkingConfig' => Arr::whereNotNull([
+                'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
+                'includeThoughts' => true,
+            ]) ?: null,
         ]);
 
         if ($request->tools() !== [] && $request->providerTools() != []) {
@@ -161,8 +160,10 @@ class Text
     {
         $providerOptions = $request->providerOptions();
 
+        $thoughtSummaries = $this->extractThoughtSummaries($data);
+
         $this->responseBuilder->addStep(new Step(
-            text: data_get($data, 'candidates.0.content.parts.0.text') ?? '',
+            text: $this->extractTextContent($data),
             finishReason: $finishReason,
             toolCalls: $finishReason === FinishReason::ToolCalls ? ToolCallMap::map(data_get($data, 'candidates.0.content.parts', [])) : [],
             toolResults: $toolResults,
@@ -185,7 +186,49 @@ class Text
                 'citations' => CitationMapper::mapFromGemini(data_get($data, 'candidates.0', [])) ?: null,
                 'searchEntryPoint' => data_get($data, 'candidates.0.groundingMetadata.searchEntryPoint'),
                 'searchQueries' => data_get($data, 'candidates.0.groundingMetadata.webSearchQueries'),
+                'thoughtSummaries' => $thoughtSummaries !== [] ? $thoughtSummaries : null,
             ]),
         ));
+    }
+
+    /**
+     * Extract only the regular text content (non-thought parts).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function extractTextContent(array $data): string
+    {
+        $parts = data_get($data, 'candidates.0.content.parts', []);
+        $textParts = [];
+
+        foreach ($parts as $part) {
+            // Only include text from parts that are NOT thoughts
+            if (isset($part['text']) && (! isset($part['thought']) || $part['thought'] === false)) {
+                $textParts[] = $part['text'];
+            }
+        }
+
+        return implode('', $textParts);
+    }
+
+    /**
+     * Extract thought summaries from the response.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, string>
+     */
+    protected function extractThoughtSummaries(array $data): array
+    {
+        $parts = data_get($data, 'candidates.0.content.parts', []);
+        $thoughtSummaries = [];
+
+        foreach ($parts as $part) {
+            // Collect text from parts marked as thoughts
+            if (isset($part['thought']) && $part['thought'] === true && isset($part['text'])) {
+                $thoughtSummaries[] = $part['text'];
+            }
+        }
+
+        return $thoughtSummaries;
     }
 }
