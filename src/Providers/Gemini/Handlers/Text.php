@@ -49,7 +49,7 @@ class Text
 
         $data = $response->json();
 
-        $isToolCall = ! empty(data_get($data, 'candidates.0.content.parts.0.functionCall'));
+        $isToolCall = $this->hasToolCalls($data);
 
         $responseMessage = new AssistantMessage(
             $this->extractTextContent($data),
@@ -230,5 +230,23 @@ class Text
         }
 
         return $thoughtSummaries;
+    }
+
+    /**
+     * Check if the response contains tool calls in any part.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function hasToolCalls(array $data): bool
+    {
+        $parts = data_get($data, 'candidates.0.content.parts', []);
+
+        foreach ($parts as $part) {
+            if (isset($part['functionCall'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
