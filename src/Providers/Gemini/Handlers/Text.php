@@ -70,7 +70,12 @@ class Text
         };
     }
 
-    protected function sendRequest(Request $request): ClientResponse
+    /**
+     * Build request payload for Gemini API
+     *
+     * @return array<string, mixed>
+     */
+    public function buildPayload(Request $request): array
     {
         $providerOptions = $request->providerOptions();
 
@@ -84,7 +89,7 @@ class Text
             ] : null,
         ]);
 
-        if ($request->tools() !== [] && $request->providerTools() != []) {
+        if ($request->tools() !== [] && $request->providerTools() !== []) {
             throw new PrismException('Use of provider tools with custom tools is not currently supported by Gemini.');
         }
 
@@ -105,17 +110,21 @@ class Text
             $tools['function_declarations'] = ToolMap::map($request->tools());
         }
 
-        return $this->client->post(
-            "{$request->model()}:generateContent",
-            Arr::whereNotNull([
-                ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-                'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-                'tools' => $tools !== [] ? $tools : null,
-                'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-                'safetySettings' => $providerOptions['safetySettings'] ?? null,
-            ])
-        );
+        return Arr::whereNotNull([
+            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
+            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
+            'tools' => $tools !== [] ? $tools : null,
+            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
+            'safetySettings' => $providerOptions['safetySettings'] ?? null,
+        ]);
+    }
+
+    protected function sendRequest(Request $request): ClientResponse
+    {
+        $payload = $this->buildPayload($request);
+
+        return $this->client->post("{$request->model()}:generateContent", $payload);
     }
 
     /**

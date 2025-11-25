@@ -71,9 +71,11 @@ class Structured
     }
 
     /**
+     * Build request payload for Gemini API
+     *
      * @return array<string, mixed>
      */
-    public function sendRequest(Request $request): array
+    public function buildPayload(Request $request): array
     {
         $providerOptions = $request->providerOptions();
 
@@ -102,26 +104,33 @@ class Structured
             ];
         }
 
-        $response = $this->client->post(
-            "{$request->model()}:generateContent",
-            Arr::whereNotNull([
-                ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-                'generationConfig' => Arr::whereNotNull([
-                    'response_mime_type' => 'application/json',
-                    'response_schema' => (new SchemaMap($request->schema()))->toArray(),
-                    'temperature' => $request->temperature(),
-                    'topP' => $request->topP(),
-                    'maxOutputTokens' => $request->maxTokens(),
-                    'thinkingConfig' => Arr::whereNotNull([
-                        'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
-                    ]) ?: null,
-                ]),
-                'tools' => $tools !== [] ? $tools : null,
-                'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-                'safetySettings' => $providerOptions['safetySettings'] ?? null,
-            ])
-        );
+        return Arr::whereNotNull([
+            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
+            'generationConfig' => Arr::whereNotNull([
+                'response_mime_type' => 'application/json',
+                'response_schema' => (new SchemaMap($request->schema()))->toArray(),
+                'temperature' => $request->temperature(),
+                'topP' => $request->topP(),
+                'maxOutputTokens' => $request->maxTokens(),
+                'thinkingConfig' => Arr::whereNotNull([
+                    'thinkingBudget' => $providerOptions['thinkingBudget'] ?? null,
+                ]) ?: null,
+            ]),
+            'tools' => $tools !== [] ? $tools : null,
+            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
+            'safetySettings' => $providerOptions['safetySettings'] ?? null,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function sendRequest(Request $request): array
+    {
+        $payload = $this->buildPayload($request);
+
+        $response = $this->client->post("{$request->model()}:generateContent", $payload);
 
         return $response->json();
     }

@@ -44,6 +44,8 @@ class PendingRequest
 
     protected ?Closure $completeCallback = null;
 
+    protected ?string $batchKey = null;
+
     /**
      * @deprecated Use `asText` instead.
      */
@@ -121,6 +123,16 @@ class PendingRequest
         (new BroadcastAdapter($channels))($this->asStream());
     }
 
+    /**
+     * Set a batch key for this request (used in Gemini batch operations)
+     */
+    public function withBatchKey(string $key): self
+    {
+        $this->batchKey = $key;
+
+        return $this;
+    }
+
     public function toRequest(): Request
     {
         if ($this->messages && $this->prompt) {
@@ -158,6 +170,7 @@ class PendingRequest
             toolChoice: $this->toolChoice,
             providerOptions: $this->providerOptions,
             providerTools: $this->providerTools,
+            batchKey: $this->batchKey,
         );
     }
 }

@@ -43,6 +43,7 @@ class Request implements PrismRequest
         protected string|ToolChoice|null $toolChoice,
         array $providerOptions = [],
         protected array $providerTools = [],
+        protected ?string $batchKey = null,
     ) {
         $this->providerOptions = $providerOptions;
     }
@@ -141,5 +142,10 @@ class Request implements PrismRequest
         $this->messages = array_merge($this->messages, [$message]);
 
         return $this;
+    }
+
+    public function batchKey(): ?string
+    {
+        return $this->batchKey;
     }
 }

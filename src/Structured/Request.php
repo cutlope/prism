@@ -47,6 +47,7 @@ class Request implements PrismRequest
         protected int $maxSteps,
         array $providerOptions = [],
         protected array $providerTools = [],
+        protected ?string $batchKey = null,
     ) {
         $this->providerOptions = $providerOptions;
     }
@@ -155,5 +156,10 @@ class Request implements PrismRequest
     public function providerTools(): array
     {
         return $this->providerTools;
+    }
+
+    public function batchKey(): ?string
+    {
+        return $this->batchKey;
     }
 }
