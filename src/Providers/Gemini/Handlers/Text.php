@@ -116,16 +116,23 @@ class Text
             $tools['function_declarations'] = ToolMap::map($request->tools());
         }
 
+        $requestBody = Arr::whereNotNull([
+            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
+            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
+            'tools' => $tools !== [] ? $tools : null,
+            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
+            'safetySettings' => $providerOptions['safetySettings'] ?? null,
+        ]);
+
+        // Debug: Log raw request body
+        if (($providerOptions['debug'] ?? false) || isset($_ENV['PRISM_DEBUG_GEMINI'])) {
+            error_log('Gemini Text Request Body: '.json_encode($requestBody, JSON_PRETTY_PRINT));
+        }
+
         return $this->client->post(
             "{$request->model()}:generateContent",
-            Arr::whereNotNull([
-                ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-                'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-                'tools' => $tools !== [] ? $tools : null,
-                'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-                'safetySettings' => $providerOptions['safetySettings'] ?? null,
-            ])
+            $requestBody
         );
     }
 
