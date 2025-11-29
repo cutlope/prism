@@ -274,3 +274,31 @@ it('throws an exception of multiple system prompts are given', function (): void
 
     $messageMap();
 })->throws(PrismException::class, 'Gemini only supports one system instruction.');
+
+it('preserves interleaved order of images and text with additionalContentOrdered', function (): void {
+    $messageMap = new MessageMap(
+        messages: [
+            new UserMessage(
+                content: 'Please describe how these two furniture items could fit into the same living room design.',
+                additionalContentOrdered: [
+                    new \Prism\Prism\ValueObjects\Media\Text('This is the first image, showing a wooden chair.'),
+                    Image::fromLocalPath('tests/Fixtures/diamond.png'),
+                    new \Prism\Prism\ValueObjects\Media\Text('This is the second image, displaying a modern sofa.'),
+                    Image::fromLocalPath('tests/Fixtures/diamond_background_removed.png'),
+                ]
+            ),
+        ],
+        systemPrompts: []
+    );
+
+    $mappedMessage = $messageMap();
+    $parts = data_get($mappedMessage, 'contents.0.parts');
+
+    expect($parts)->toHaveCount(4);
+
+    // Verify the order is preserved: text1, image1, text2, image2
+    expect(data_get($parts, '0.text'))->toBe('This is the first image, showing a wooden chair.');
+    expect(data_get($parts, '1.inline_data.mime_type'))->toBe('image/png');
+    expect(data_get($parts, '2.text'))->toBe('This is the second image, displaying a modern sofa.');
+    expect(data_get($parts, '3.inline_data.mime_type'))->toBe('image/png');
+});

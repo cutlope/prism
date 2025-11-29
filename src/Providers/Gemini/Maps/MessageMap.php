@@ -12,6 +12,7 @@ use Prism\Prism\ValueObjects\Media\Audio;
 use Prism\Prism\ValueObjects\Media\Document;
 use Prism\Prism\ValueObjects\Media\Image;
 use Prism\Prism\ValueObjects\Media\Media;
+use Prism\Prism\ValueObjects\Media\Text;
 use Prism\Prism\ValueObjects\Media\Video;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
@@ -98,6 +99,31 @@ class MessageMap
 
     protected function mapUserMessage(UserMessage $message): void
     {
+        if ($message->additionalContentOrdered !== []) {
+            $parts = [];
+
+            foreach ($message->additionalContentOrdered as $content) {
+                if ($content instanceof Text) {
+                    if ($content->text !== '' && $content->text !== '0') {
+                        $parts[] = ['text' => $content->text];
+                    }
+                } elseif ($content instanceof Image) {
+                    $parts[] = (new ImageMapper($content))->toPayload();
+                } elseif ($content instanceof Document) {
+                    $parts[] = (new DocumentMapper($content))->toPayload();
+                } elseif ($content instanceof Video || $content instanceof Audio || $content instanceof Media) {
+                    $parts[] = (new AudioVideoMapper($content))->toPayload();
+                }
+            }
+
+            $this->contents['contents'][] = [
+                'role' => 'user',
+                'parts' => $parts,
+            ];
+
+            return;
+        }
+
         $parts = [];
 
         if ($message->text() !== '' && $message->text() !== '0') {
