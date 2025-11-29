@@ -12,6 +12,7 @@ use Prism\Prism\ValueObjects\Media\Audio;
 use Prism\Prism\ValueObjects\Media\Document;
 use Prism\Prism\ValueObjects\Media\Image;
 use Prism\Prism\ValueObjects\Media\Media;
+use Prism\Prism\ValueObjects\Media\Text;
 use Prism\Prism\ValueObjects\Media\Video;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
@@ -98,6 +99,33 @@ class MessageMap
 
     protected function mapUserMessage(UserMessage $message): void
     {
+        // Check if using ordered content (preserves exact order of images/text/media)
+        if ($message->additionalOrderedContent !== []) {
+            $parts = [];
+
+            foreach ($message->additionalOrderedContent as $content) {
+                if ($content instanceof Text) {
+                    if ($content->text !== '' && $content->text !== '0') {
+                        $parts[] = ['text' => $content->text];
+                    }
+                } elseif ($content instanceof Image) {
+                    $parts[] = (new ImageMapper($content))->toPayload();
+                } elseif ($content instanceof Document) {
+                    $parts[] = (new DocumentMapper($content))->toPayload();
+                } elseif ($content instanceof Video || $content instanceof Audio || $content instanceof Media) {
+                    $parts[] = (new AudioVideoMapper($content))->toPayload();
+                }
+            }
+
+            $this->contents['contents'][] = [
+                'role' => 'user',
+                'parts' => $parts,
+            ];
+
+            return;
+        }
+
+        // Original behavior: reorder content (documents, text, images, videos, audios)
         $parts = [];
 
         if ($message->text() !== '' && $message->text() !== '0') {

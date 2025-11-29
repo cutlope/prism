@@ -19,11 +19,13 @@ class UserMessage implements Message
 
     /**
      * @param  array<int, Text|Image|Document|Media>  $additionalContent
+     * @param  array<int, Text|Image|Document|Media|Audio|Video>  $additionalOrderedContent
      * @param  array<string, mixed>  $additionalAttributes
      */
     public function __construct(
         public readonly string $content,
         public array $additionalContent = [],
+        public array $additionalOrderedContent = [],
         public readonly array $additionalAttributes = [],
     ) {
         $this->additionalContent[] = new Text($content);
