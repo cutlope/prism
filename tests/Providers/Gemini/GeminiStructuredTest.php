@@ -369,3 +369,51 @@ it('supports nullable AnyOfSchema in structured output', function (): void {
         return true;
     });
 });
+
+it('works with additionalOrderedContent for interleaved images and text', function (): void {
+    FixtureResponse::fakeResponseSequence('*', 'gemini/generate-structured');
+
+    $schema = new ObjectSchema(
+        'furniture_analysis',
+        'Analysis of furniture compatibility',
+        [
+            new StringSchema('compatibility', 'How the furniture items work together', true),
+            new StringSchema('style_notes', 'Notes about the style compatibility', true),
+        ],
+        ['compatibility', 'style_notes']
+    );
+
+    $response = Prism::structured()
+        ->using(Provider::Gemini, 'gemini-2.5-flash')
+        ->withSchema($schema)
+        ->withMessages([
+            new UserMessage(
+                content: '',
+                additionalOrderedContent: [
+                    \Prism\Prism\ValueObjects\Media\Image::fromLocalPath('tests/Fixtures/diamond.png'),
+                    new \Prism\Prism\ValueObjects\Media\Text('This is a wooden chair.'),
+                    \Prism\Prism\ValueObjects\Media\Image::fromLocalPath('tests/Fixtures/diamond.png'),
+                    new \Prism\Prism\ValueObjects\Media\Text('This is a modern sofa.'),
+                    new \Prism\Prism\ValueObjects\Media\Text('Analyze how these furniture items could work together in a living room.'),
+                ]
+            ),
+        ])
+        ->asStructured();
+
+    // Verify the request preserves interleaved order
+    Http::assertSent(function (Request $request): bool {
+        $parts = $request->data()['contents'][0]['parts'];
+
+        // Should have 5 parts in order: image, text, image, text, text
+        expect($parts)->toHaveCount(5);
+        expect($parts[0])->toHaveKey('inline_data');
+        expect($parts[1])->toBe(['text' => 'This is a wooden chair.']);
+        expect($parts[2])->toHaveKey('inline_data');
+        expect($parts[3])->toBe(['text' => 'This is a modern sofa.']);
+        expect($parts[4])->toBe(['text' => 'Analyze how these furniture items could work together in a living room.']);
+
+        return true;
+    });
+
+    expect($response->structured)->toBeArray();
+});
