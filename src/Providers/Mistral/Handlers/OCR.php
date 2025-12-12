@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Prism\Prism\Providers\Mistral\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Exceptions\PrismRateLimitedException;
@@ -51,11 +52,27 @@ class OCR
      */
     protected function sendRequest(): array
     {
-        /** @var \Illuminate\Http\Client\Response $response */
-        $response = $this->client->post('/ocr', [
+        $payload = [
             'model' => $this->model,
             'document' => (new DocumentMapper($this->document))->toPayload(),
-        ]);
+        ];
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Mistral request payload', [
+                'model' => $this->model,
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var \Illuminate\Http\Client\Response $response */
+        $response = $this->client->post('/ocr', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Mistral response payload', [
+                'model' => $this->model,
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response->json();
     }

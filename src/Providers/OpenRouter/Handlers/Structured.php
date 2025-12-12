@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Prism\Prism\Providers\OpenRouter\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Providers\OpenRouter\Concerns\BuildsRequestOptions;
 use Prism\Prism\Providers\OpenRouter\Concerns\MapsFinishReason;
@@ -48,25 +49,38 @@ class Structured
      */
     protected function sendRequest(Request $request): array
     {
-        /** @var \Illuminate\Http\Client\Response $response */
-        $response = $this->client->post(
-            'chat/completions',
-            array_merge([
-                'model' => $request->model(),
-                'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_tokens' => $request->maxTokens(),
-                'structured_outputs' => true,
-            ], $this->buildRequestOptions($request, [
-                'response_format' => [
-                    'type' => 'json_schema',
-                    'json_schema' => [
-                        'name' => $request->schema()->name(),
-                        'strict' => true,
-                        'schema' => $request->schema()->toArray(),
-                    ],
+        $payload = array_merge([
+            'model' => $request->model(),
+            'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_tokens' => $request->maxTokens(),
+            'structured_outputs' => true,
+        ], $this->buildRequestOptions($request, [
+            'response_format' => [
+                'type' => 'json_schema',
+                'json_schema' => [
+                    'name' => $request->schema()->name(),
+                    'strict' => true,
+                    'schema' => $request->schema()->toArray(),
                 ],
-            ]))
-        );
+            ],
+        ]));
+
+        if (config('prism.debug.requests')) {
+            Log::debug('OpenRouter request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var \Illuminate\Http\Client\Response $response */
+        $response = $this->client->post('chat/completions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('OpenRouter response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response->json();
     }

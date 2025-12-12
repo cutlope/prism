@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Images\Request;
 use Prism\Prism\Images\Response;
 use Prism\Prism\Images\ResponseBuilder;
@@ -51,8 +52,24 @@ class Images
         $endpoint = $request->model();
         $endpoint .= (str_contains($request->model(), 'gemini') ? ':generateContent' : ':predict');
 
+        $payload = ImageRequestMap::map($request);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Gemini request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var ClientResponse $response */
-        $response = $this->client->post($endpoint, ImageRequestMap::map($request));
+        $response = $this->client->post($endpoint, $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Gemini response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

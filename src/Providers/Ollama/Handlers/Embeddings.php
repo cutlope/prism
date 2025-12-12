@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\Ollama\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Embeddings\Request;
 use Prism\Prism\Embeddings\Response as EmbeddingsResponse;
 use Prism\Prism\Exceptions\PrismException;
@@ -42,16 +43,29 @@ class Embeddings
 
     protected function sendRequest(Request $request): Response
     {
-        /** @var Response $response */
-        $response = $this->client->post(
-            'api/embed',
-            Arr::whereNotNull([
+        $payload = Arr::whereNotNull([
+            'model' => $request->model(),
+            'input' => $request->inputs(),
+            'keep_alive' => $request->providerOptions('keep_alive'),
+            'options' => $request->providerOptions() ?: null,
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Ollama request payload', [
                 'model' => $request->model(),
-                'input' => $request->inputs(),
-                'keep_alive' => $request->providerOptions('keep_alive'),
-                'options' => $request->providerOptions() ?: null,
-            ])
-        );
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var Response $response */
+        $response = $this->client->post('api/embed', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Ollama response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

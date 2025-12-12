@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\Groq\Handlers;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Audio\AudioResponse;
 use Prism\Prism\Audio\SpeechToTextRequest;
 use Prism\Prism\Audio\TextResponse;
@@ -26,8 +27,24 @@ class Audio
     {
         $mapper = new TextToSpeechRequestMapper($request);
 
+        $payload = $mapper->toPayload();
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Groq request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var \Illuminate\Http\Client\Response $response */
-        $response = $this->client->post('audio/speech', $mapper->toPayload());
+        $response = $this->client->post('audio/speech', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Groq response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         if (! $response->successful()) {
             throw new Exception('Failed to generate audio: '.$response->body());
@@ -47,6 +64,21 @@ class Audio
     {
         $filename = $this->generateFilename($request->input()->mimeType());
 
+        $payload = Arr::whereNotNull([
+            'model' => $request->model(),
+            'language' => $request->providerOptions('language') ?? null,
+            'prompt' => $request->providerOptions('prompt') ?? null,
+            'response_format' => $request->providerOptions('response_format') ?? null,
+            'temperature' => $request->providerOptions('temperature') ?? null,
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Groq request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var \Illuminate\Http\Client\Response $response */
         $response = $this
             ->client
@@ -56,13 +88,14 @@ class Audio
                 $filename,
                 ['Content-Type' => $request->input()->mimeType()]
             )
-            ->post('audio/transcriptions', Arr::whereNotNull([
+            ->post('audio/transcriptions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Groq response payload', [
                 'model' => $request->model(),
-                'language' => $request->providerOptions('language') ?? null,
-                'prompt' => $request->providerOptions('prompt') ?? null,
-                'response_format' => $request->providerOptions('response_format') ?? null,
-                'temperature' => $request->providerOptions('temperature') ?? null,
-            ]));
+                'response' => $response->json(),
+            ]);
+        }
 
         if (json_validate($response->body())) {
             $data = $response->json();

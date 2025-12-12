@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\Mistral\Handlers;
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Audio\SpeechToTextRequest;
 use Prism\Prism\Audio\TextResponse;
 use Prism\Prism\Providers\Mistral\Concerns\ProcessRateLimits;
@@ -20,6 +21,22 @@ class Audio
 
     public function handleSpeechToText(SpeechToTextRequest $request): TextResponse
     {
+        $payload = Arr::whereNotNull([
+            'model' => $request->model(),
+            'language' => $request->providerOptions('language') ?? null,
+            'prompt' => $request->providerOptions('prompt') ?? null,
+            'response_format' => $request->providerOptions('response_format') ?? null,
+            'temperature' => $request->providerOptions('temperature') ?? null,
+            'timestamp_granularities' => $request->providerOptions('timestamp_granularities') ?? null,
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Mistral request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var \Illuminate\Http\Client\Response $response */
         $response = $this
             ->client
@@ -29,14 +46,14 @@ class Audio
                 'audio',
                 ['Content-Type' => $request->input()->mimeType()]
             )
-            ->post('audio/transcriptions', Arr::whereNotNull([
+            ->post('audio/transcriptions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Mistral response payload', [
                 'model' => $request->model(),
-                'language' => $request->providerOptions('language') ?? null,
-                'prompt' => $request->providerOptions('prompt') ?? null,
-                'response_format' => $request->providerOptions('response_format') ?? null,
-                'temperature' => $request->providerOptions('temperature') ?? null,
-                'timestamp_granularities' => $request->providerOptions('timestamp_granularities') ?? null,
-            ]));
+                'response' => $response->json(),
+            ]);
+        }
 
         if (json_validate($response->body())) {
             $data = $response->json();

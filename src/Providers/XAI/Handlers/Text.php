@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\XAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -118,8 +119,22 @@ class Text
             'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
         ]));
 
+        if (config('prism.debug.requests')) {
+            Log::debug('xAI request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var ClientResponse $response */
         $response = $this->client->post('chat/completions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('xAI response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

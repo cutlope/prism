@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Prism\Prism\Images\Request;
 use Prism\Prism\Images\Response;
@@ -57,8 +58,24 @@ class Images
             return $this->sendImageEditRequest($request);
         }
 
+        $payload = ImageRequestMap::map($request);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('OpenAI request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var ClientResponse $response */
-        $response = $this->client->post('images/generations', ImageRequestMap::map($request));
+        $response = $this->client->post('images/generations', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('OpenAI response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }
@@ -90,10 +107,26 @@ class Images
                 );
         }
 
+        $payload = ImageRequestMap::map($request);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('OpenAI request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var ClientResponse $response */
         $response = $this
             ->client
-            ->post('images/edits', ImageRequestMap::map($request));
+            ->post('images/edits', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('OpenAI response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Contracts\Message;
 use Prism\Prism\Providers\Gemini\Maps\MessageMap;
 use Prism\Prism\Providers\Gemini\ValueObjects\GeminiCachedObject;
@@ -42,9 +43,25 @@ class Cache
             'ttl' => $this->ttl.'s',
         ]);
 
+        if (config('prism.debug.requests')) {
+            Log::debug('Gemini request payload', [
+                'model' => $this->model,
+                'payload' => $request,
+            ]);
+        }
+
         /** @var \Illuminate\Http\Client\Response $response */
         $response = $this->client->post('/cachedContents', $request);
 
-        return $response->json();
+        $data = $response->json();
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Gemini response payload', [
+                'model' => $this->model,
+                'response' => $data,
+            ]);
+        }
+
+        return $data;
     }
 }

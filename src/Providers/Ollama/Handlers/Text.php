@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\Ollama\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -66,27 +67,43 @@ class Text
      */
     protected function sendRequest(Request $request): array
     {
+        $payload = [
+            'model' => $request->model(),
+            'messages' => (new MessageMap(array_merge(
+                $request->systemPrompts(),
+                $request->messages()
+            )))->map(),
+            'tools' => ToolMap::map($request->tools()),
+            'stream' => false,
+            ...Arr::whereNotNull([
+                'think' => $request->providerOptions('thinking'),
+                'keep_alive' => $request->providerOptions('keep_alive'),
+            ]),
+            'options' => Arr::whereNotNull(array_merge([
+                'temperature' => $request->temperature(),
+                'num_predict' => $request->maxTokens() ?? 2048,
+                'top_p' => $request->topP(),
+            ], $request->providerOptions())),
+        ];
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Ollama request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var \Illuminate\Http\Client\Response $response */
         $response = $this
             ->client
-            ->post('api/chat', [
+            ->post('api/chat', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Ollama response payload', [
                 'model' => $request->model(),
-                'messages' => (new MessageMap(array_merge(
-                    $request->systemPrompts(),
-                    $request->messages()
-                )))->map(),
-                'tools' => ToolMap::map($request->tools()),
-                'stream' => false,
-                ...Arr::whereNotNull([
-                    'think' => $request->providerOptions('thinking'),
-                    'keep_alive' => $request->providerOptions('keep_alive'),
-                ]),
-                'options' => Arr::whereNotNull(array_merge([
-                    'temperature' => $request->temperature(),
-                    'num_predict' => $request->maxTokens() ?? 2048,
-                    'top_p' => $request->topP(),
-                ], $request->providerOptions())),
+                'response' => $response->json(),
             ]);
+        }
 
         return $response->json();
     }

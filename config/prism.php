@@ -61,4 +61,8 @@ return [
             ],
         ],
     ],
+    'debug' => [
+        'responses' => env('PRISM_DEBUG_RESPONSES', false),
+        'requests' => env('PRISM_DEBUG_REQUESTS', false),
+    ],
 ];

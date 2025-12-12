@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Prism\Prism\Providers\OpenRouter\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -99,15 +100,28 @@ class Text
      */
     protected function sendRequest(Request $request): array
     {
-        /** @var \Illuminate\Http\Client\Response $response */
-        $response = $this->client->post(
-            'chat/completions',
-            array_merge([
+        $payload = array_merge([
+            'model' => $request->model(),
+            'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_tokens' => $request->maxTokens(),
+        ], $this->buildRequestOptions($request));
+
+        if (config('prism.debug.requests')) {
+            Log::debug('OpenRouter request payload', [
                 'model' => $request->model(),
-                'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_tokens' => $request->maxTokens(),
-            ], $this->buildRequestOptions($request))
-        );
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var \Illuminate\Http\Client\Response $response */
+        $response = $this->client->post('chat/completions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('OpenRouter response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response->json();
     }

@@ -5,6 +5,7 @@ namespace Prism\Prism\Providers\VoyageAI;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Embeddings\Request as EmbeddingsRequest;
 use Prism\Prism\Embeddings\Response as EmbeddingsResponse;
 use Prism\Prism\Exceptions\PrismException;
@@ -46,13 +47,29 @@ class Embeddings
     {
         $providerOptions = $this->request->providerOptions();
 
-        /** @var Response $response */
-        $response = $this->client->post('embeddings', Arr::whereNotNull([
+        $payload = Arr::whereNotNull([
             'model' => $this->request->model(),
             'input' => $this->request->inputs(),
             'input_type' => $providerOptions['inputType'] ?? null,
             'truncation' => $providerOptions['truncation'] ?? null,
-        ]));
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('VoyageAI request payload', [
+                'model' => $this->request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var Response $response */
+        $response = $this->client->post('embeddings', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('VoyageAI response payload', [
+                'model' => $this->request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         $this->httpResponse = $response;
     }

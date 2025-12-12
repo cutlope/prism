@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -124,30 +125,43 @@ class Text
 
     protected function sendRequest(Request $request): ClientResponse
     {
-        /** @var ClientResponse $response */
-        $response = $this->client->post(
-            'responses',
-            array_merge([
+        $payload = array_merge([
+            'model' => $request->model(),
+            'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_output_tokens' => $request->maxTokens(),
+        ], Arr::whereNotNull([
+            'temperature' => $request->temperature(),
+            'top_p' => $request->topP(),
+            'metadata' => $request->providerOptions('metadata'),
+            'tools' => $this->buildTools($request),
+            'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
+            'parallel_tool_calls' => $request->providerOptions('parallel_tool_calls'),
+            'previous_response_id' => $request->providerOptions('previous_response_id'),
+            'service_tier' => $request->providerOptions('service_tier'),
+            'text' => $request->providerOptions('text_verbosity') ? [
+                'verbosity' => $request->providerOptions('text_verbosity'),
+            ] : null,
+            'truncation' => $request->providerOptions('truncation'),
+            'reasoning' => $request->providerOptions('reasoning'),
+            'store' => $request->providerOptions('store'),
+        ]));
+
+        if (config('prism.debug.requests')) {
+            Log::debug('OpenAI request payload', [
                 'model' => $request->model(),
-                'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_output_tokens' => $request->maxTokens(),
-            ], Arr::whereNotNull([
-                'temperature' => $request->temperature(),
-                'top_p' => $request->topP(),
-                'metadata' => $request->providerOptions('metadata'),
-                'tools' => $this->buildTools($request),
-                'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
-                'parallel_tool_calls' => $request->providerOptions('parallel_tool_calls'),
-                'previous_response_id' => $request->providerOptions('previous_response_id'),
-                'service_tier' => $request->providerOptions('service_tier'),
-                'text' => $request->providerOptions('text_verbosity') ? [
-                    'verbosity' => $request->providerOptions('text_verbosity'),
-                ] : null,
-                'truncation' => $request->providerOptions('truncation'),
-                'reasoning' => $request->providerOptions('reasoning'),
-                'store' => $request->providerOptions('store'),
-            ]))
-        );
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var ClientResponse $response */
+        $response = $this->client->post('responses', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('OpenAI response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

@@ -4,6 +4,7 @@ namespace Prism\Prism\Providers\DeepSeek\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Providers\DeepSeek\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\DeepSeek\Concerns\ValidatesResponses;
@@ -46,19 +47,32 @@ class Structured
      */
     protected function sendRequest(Request $request): array
     {
-        /** @var \Illuminate\Http\Client\Response $response */
-        $response = $this->client->post(
-            'chat/completions',
-            array_merge([
+        $payload = array_merge([
+            'model' => $request->model(),
+            'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_completion_tokens' => $request->maxTokens(),
+        ], Arr::whereNotNull([
+            'temperature' => $request->temperature(),
+            'top_p' => $request->topP(),
+            'response_format' => ['type' => 'json_object'],
+        ]));
+
+        if (config('prism.debug.requests')) {
+            Log::debug('DeepSeek request payload', [
                 'model' => $request->model(),
-                'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_completion_tokens' => $request->maxTokens(),
-            ], Arr::whereNotNull([
-                'temperature' => $request->temperature(),
-                'top_p' => $request->topP(),
-                'response_format' => ['type' => 'json_object'],
-            ]))
-        );
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var \Illuminate\Http\Client\Response $response */
+        $response = $this->client->post('chat/completions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('DeepSeek response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response->json();
     }

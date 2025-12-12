@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -116,18 +117,34 @@ class Text
             $tools['function_declarations'] = ToolMap::map($request->tools());
         }
 
+        $payload = Arr::whereNotNull([
+            ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'cachedContent' => $providerOptions['cachedContentName'] ?? null,
+            'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
+            'tools' => $tools !== [] ? $tools : null,
+            'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
+            'safetySettings' => $providerOptions['safetySettings'] ?? null,
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Gemini request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var ClientResponse $response */
         $response = $this->client->post(
             "{$request->model()}:generateContent",
-            Arr::whereNotNull([
-                ...(new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'cachedContent' => $providerOptions['cachedContentName'] ?? null,
-                'generationConfig' => $generationConfig !== [] ? $generationConfig : null,
-                'tools' => $tools !== [] ? $tools : null,
-                'tool_config' => $request->toolChoice() ? ToolChoiceMap::map($request->toolChoice()) : null,
-                'safetySettings' => $providerOptions['safetySettings'] ?? null,
-            ])
+            $payload
         );
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Gemini response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

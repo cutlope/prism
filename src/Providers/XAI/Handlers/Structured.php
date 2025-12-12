@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\XAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Providers\XAI\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\XAI\Concerns\ValidatesResponses;
@@ -82,19 +83,32 @@ class Structured
 
         $responseFormat = $this->buildResponseFormat($request);
 
-        /** @var ClientResponse $response */
-        $response = $this->client->post(
-            'chat/completions',
-            array_merge([
+        $payload = array_merge([
+            'model' => $request->model(),
+            'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_tokens' => $request->maxTokens() ?? 2048,
+            'response_format' => $responseFormat,
+        ], Arr::whereNotNull([
+            'temperature' => $request->temperature(),
+            'top_p' => $request->topP(),
+        ]));
+
+        if (config('prism.debug.requests')) {
+            Log::debug('xAI request payload', [
                 'model' => $request->model(),
-                'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_tokens' => $request->maxTokens() ?? 2048,
-                'response_format' => $responseFormat,
-            ], Arr::whereNotNull([
-                'temperature' => $request->temperature(),
-                'top_p' => $request->topP(),
-            ]))
-        );
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var ClientResponse $response */
+        $response = $this->client->post('chat/completions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('xAI response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

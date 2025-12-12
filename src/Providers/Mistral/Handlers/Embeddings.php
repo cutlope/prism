@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\Mistral\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Embeddings\Request;
 use Prism\Prism\Embeddings\Response as EmbeddingsResponse;
 use Prism\Prism\Providers\Mistral\Concerns\ProcessRateLimits;
@@ -41,14 +42,30 @@ class Embeddings
 
     protected function sendRequest(Request $request): Response
     {
+        $payload = [
+            'model' => $request->model(),
+            'input' => $request->inputs(),
+        ];
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Mistral request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var Response $response */
         $response = $this->client->post(
             'embeddings',
-            [
-                'model' => $request->model(),
-                'input' => $request->inputs(),
-            ]
+            $payload
         );
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Mistral response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

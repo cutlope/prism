@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Embeddings\Request;
 use Prism\Prism\Embeddings\Response as EmbeddingsResponse;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
@@ -42,15 +43,31 @@ class Embeddings
 
     protected function sendRequest(Request $request): Response
     {
+        $payload = [
+            'model' => $request->model(),
+            'input' => $request->inputs(),
+            ...($request->providerOptions() ?? []),
+        ];
+
+        if (config('prism.debug.requests')) {
+            Log::debug('OpenAI request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var Response $response */
         $response = $this->client->post(
             'embeddings',
-            [
-                'model' => $request->model(),
-                'input' => $request->inputs(),
-                ...($request->providerOptions() ?? []),
-            ]
+            $payload
         );
+
+        if (config('prism.debug.responses')) {
+            Log::debug('OpenAI response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\ElevenLabs\Handlers;
 
 use Exception;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Audio\AudioResponse;
 use Prism\Prism\Audio\SpeechToTextRequest;
 use Prism\Prism\Audio\TextResponse;
@@ -32,6 +33,21 @@ class Audio
 
     public function handleSpeechToText(SpeechToTextRequest $request): TextResponse
     {
+        $payload = array_filter([
+            'model_id' => $request->model(),
+            'language_code' => $request->providerOptions('language_code'),
+            'num_speakers' => $request->providerOptions('num_speakers'),
+            'diarize' => $request->providerOptions('diarize'),
+            'tag_audio_events' => $request->providerOptions('tag_audio_events'),
+        ], fn ($value): bool => $value !== null);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('ElevenLabs request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var \Illuminate\Http\Client\Response $response */
         $response = $this
             ->client
@@ -41,13 +57,14 @@ class Audio
                 'audio',
                 ['Content-Type' => $request->input()->mimeType()]
             )
-            ->post('speech-to-text', array_filter([
-                'model_id' => $request->model(),
-                'language_code' => $request->providerOptions('language_code'),
-                'num_speakers' => $request->providerOptions('num_speakers'),
-                'diarize' => $request->providerOptions('diarize'),
-                'tag_audio_events' => $request->providerOptions('tag_audio_events'),
-            ], fn ($value): bool => $value !== null));
+            ->post('speech-to-text', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('ElevenLabs response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         $response->throw();
 

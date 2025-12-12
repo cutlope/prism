@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\Groq\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -64,19 +65,32 @@ class Text
 
     protected function sendRequest(Request $request): ClientResponse
     {
-        /** @var ClientResponse $response */
-        $response = $this->client->post(
-            'chat/completions',
-            Arr::whereNotNull([
+        $payload = Arr::whereNotNull([
+            'model' => $request->model(),
+            'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_tokens' => $request->maxTokens(),
+            'temperature' => $request->temperature(),
+            'top_p' => $request->topP(),
+            'tools' => ToolMap::map($request->tools()),
+            'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Groq request payload', [
                 'model' => $request->model(),
-                'messages' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_tokens' => $request->maxTokens(),
-                'temperature' => $request->temperature(),
-                'top_p' => $request->topP(),
-                'tools' => ToolMap::map($request->tools()),
-                'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
-            ])
-        );
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var ClientResponse $response */
+        $response = $this->client->post('chat/completions', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Groq response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }

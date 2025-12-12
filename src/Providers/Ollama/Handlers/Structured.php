@@ -6,6 +6,7 @@ namespace Prism\Prism\Providers\Ollama\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Providers\Ollama\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\Ollama\Concerns\ValidatesResponse;
 use Prism\Prism\Providers\Ollama\Maps\MessageMap;
@@ -73,8 +74,7 @@ class Structured
      */
     protected function sendRequest(Request $request): array
     {
-        /** @var \Illuminate\Http\Client\Response $response */
-        $response = $this->client->post('api/chat', [
+        $payload = [
             'model' => $request->model(),
             'messages' => (new MessageMap(array_merge(
                 $request->systemPrompts(),
@@ -90,7 +90,24 @@ class Structured
                 'num_predict' => $request->maxTokens() ?? 2048,
                 'top_p' => $request->topP(),
             ], $request->providerOptions())),
-        ]);
+        ];
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Ollama request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
+        /** @var \Illuminate\Http\Client\Response $response */
+        $response = $this->client->post('api/chat', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Ollama response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response->json();
     }

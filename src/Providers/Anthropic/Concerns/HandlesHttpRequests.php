@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Prism\Prism\Providers\Anthropic\Concerns;
 
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Contracts\PrismRequest;
 use Prism\Prism\Exceptions\PrismException;
 
@@ -19,11 +20,24 @@ trait HandlesHttpRequests
 
     protected function sendRequest(): void
     {
+        $payload = static::buildHttpRequestPayload($this->request);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Anthropic request payload', [
+                'model' => $this->request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var Response $response */
-        $response = $this->client->post(
-            'messages',
-            static::buildHttpRequestPayload($this->request)
-        );
+        $response = $this->client->post('messages', $payload);
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Anthropic response payload', [
+                'model' => $this->request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         $this->httpResponse = $response;
 

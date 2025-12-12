@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\Gemini\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Embeddings\Request;
 use Prism\Prism\Embeddings\Response as EmbeddingsResponse;
 use Prism\Prism\Exceptions\PrismException;
@@ -48,21 +49,37 @@ class Embeddings
     {
         $providerOptions = $request->providerOptions();
 
+        $payload = Arr::whereNotNull([
+            'model' => $request->model(),
+            'content' => [
+                'parts' => [
+                    ['text' => $request->inputs()[0]],
+                ],
+            ],
+            'title' => $providerOptions['title'] ?? null,
+            'taskType' => $providerOptions['taskType'] ?? null,
+            'outputDimensionality' => $providerOptions['outputDimensionality'] ?? null,
+        ]);
+
+        if (config('prism.debug.requests')) {
+            Log::debug('Gemini request payload', [
+                'model' => $request->model(),
+                'payload' => $payload,
+            ]);
+        }
+
         /** @var Response $response */
         $response = $this->client->post(
             "{$request->model()}:embedContent",
-            Arr::whereNotNull([
-                'model' => $request->model(),
-                'content' => [
-                    'parts' => [
-                        ['text' => $request->inputs()[0]],
-                    ],
-                ],
-                'title' => $providerOptions['title'] ?? null,
-                'taskType' => $providerOptions['taskType'] ?? null,
-                'outputDimensionality' => $providerOptions['outputDimensionality'] ?? null,
-            ])
+            $payload
         );
+
+        if (config('prism.debug.responses')) {
+            Log::debug('Gemini response payload', [
+                'model' => $request->model(),
+                'response' => $response->json(),
+            ]);
+        }
 
         return $response;
     }
