@@ -6,13 +6,13 @@ namespace Prism\Prism\Concerns;
 
 trait ConfiguresModels
 {
-    protected ?int $maxTokens = 2048;
+    protected int|null $maxTokens = null;
 
     protected int|float|null $temperature = null;
 
     protected int|float|null $topP = null;
 
-    public function withMaxTokens(?int $maxTokens): self
+    public function withMaxTokens(int|null $maxTokens): self
     {
         $this->maxTokens = $maxTokens;
 
