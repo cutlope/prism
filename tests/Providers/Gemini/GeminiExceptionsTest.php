@@ -89,7 +89,7 @@ it('parses Gemini daily quota rate limit details', function (): void {
         return;
     }
 
-    expect()->fail('Expected PrismRateLimitedException to be thrown.');
+    \PHPUnit\Framework\Assert::fail('Expected PrismRateLimitedException to be thrown.');
 });
 
 it('parses Gemini token per minute rate limit details', function (): void {
@@ -133,7 +133,7 @@ it('parses Gemini token per minute rate limit details', function (): void {
         return;
     }
 
-    expect()->fail('Expected PrismRateLimitedException to be thrown.');
+    \PHPUnit\Framework\Assert::fail('Expected PrismRateLimitedException to be thrown.');
 });
 
 it('throws a PrismRateLimitedException with a 429 response code for cache', function (): void {
