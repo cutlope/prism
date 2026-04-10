@@ -7,6 +7,8 @@ namespace Prism\Prism\Providers\Gemini;
 use Generator;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Str;
 use Prism\Prism\Audio\AudioResponse as TextToSpeechResponse;
 use Prism\Prism\Audio\TextToSpeechRequest;
 use Prism\Prism\Concerns\InitializesClient;
@@ -31,6 +33,7 @@ use Prism\Prism\Structured\Request as StructuredRequest;
 use Prism\Prism\Structured\Response as StructuredResponse;
 use Prism\Prism\Text\Request as TextRequest;
 use Prism\Prism\Text\Response as TextResponse;
+use Prism\Prism\ValueObjects\ProviderRateLimit;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
 
 class Gemini extends Provider
@@ -110,8 +113,13 @@ class Gemini extends Provider
 
     public function handleRequestException(string $model, RequestException $e): never
     {
+        $data = $e->response->json() ?? [];
+
         match ($e->response->getStatusCode()) {
-            429 => throw PrismRateLimitedException::make([]),
+            429 => throw PrismRateLimitedException::make(
+                rateLimits: $this->processRateLimits($data),
+                retryAfter: $this->parseRetryAfter($e->response, $data),
+            ),
             503 => throw PrismProviderOverloadedException::make(class_basename($this)),
             default => $this->handleResponseErrors($e),
         };
@@ -160,6 +168,100 @@ class Gemini extends Provider
             errorMessage: data_get($data, 'error.message'),
             previous: $e
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return ProviderRateLimit[]
+     */
+    protected function processRateLimits(array $data): array
+    {
+        $details = data_get($data, 'error.details', []);
+
+        if (! is_array($details)) {
+            return [];
+        }
+
+        $rateLimits = [];
+
+        foreach ($details as $detail) {
+            if (data_get($detail, '@type') !== 'type.googleapis.com/google.rpc.QuotaFailure') {
+                continue;
+            }
+
+            $violations = data_get($detail, 'violations', []);
+
+            if (! is_array($violations)) {
+                continue;
+            }
+
+            foreach ($violations as $violation) {
+                $metric = (string) data_get($violation, 'quotaMetric', '');
+                $name = $metric !== '' ? Str::afterLast($metric, '/') : 'quota';
+
+                $quotaValue = data_get($violation, 'quotaValue');
+
+                $rateLimits[] = new ProviderRateLimit(
+                    name: $name,
+                    limit: is_numeric($quotaValue) ? (int) $quotaValue : null
+                );
+            }
+        }
+
+        return $rateLimits;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function parseRetryAfter(Response $response, array $data): ?int
+    {
+        $headerRetryAfter = $response->header('retry-after');
+        if ($headerRetryAfter !== null && is_numeric($headerRetryAfter)) {
+            return (int) $headerRetryAfter;
+        }
+
+        $details = data_get($data, 'error.details', []);
+
+        if (is_array($details)) {
+            foreach ($details as $detail) {
+                if (data_get($detail, '@type') !== 'type.googleapis.com/google.rpc.RetryInfo') {
+                    continue;
+                }
+
+                $retryDelay = data_get($detail, 'retryDelay');
+                if (is_string($retryDelay)) {
+                    $parsedRetryDelay = $this->parseDurationToSeconds($retryDelay);
+
+                    if ($parsedRetryDelay !== null && $parsedRetryDelay > 0) {
+                        return $parsedRetryDelay;
+                    }
+                }
+            }
+        }
+
+        $message = data_get($data, 'error.message');
+        if (is_string($message) && preg_match('/Please retry in ([0-9.]+)(ms|s)\.?/i', $message, $matches) === 1) {
+            return $this->parseDurationToSeconds($matches[1].$matches[2]);
+        }
+
+        return null;
+    }
+
+    protected function parseDurationToSeconds(string $duration): ?int
+    {
+        if (preg_match('/^([0-9]+(?:\.[0-9]+)?)(ms|s)$/i', trim($duration), $matches) !== 1) {
+            return null;
+        }
+
+        $value = (float) $matches[1];
+        $unit = strtolower($matches[2]);
+
+        if ($unit === 'ms') {
+            return (int) ceil($value / 1000);
+        }
+
+        return (int) ceil($value);
     }
 
     /**
