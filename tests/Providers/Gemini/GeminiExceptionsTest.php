@@ -85,7 +85,11 @@ it('parses Gemini daily quota rate limit details', function (): void {
         expect($e->rateLimits[0])->toBeInstanceOf(ProviderRateLimit::class);
         expect($e->rateLimits[0]->name)->toEqual('generate_content_free_tier_requests');
         expect($e->rateLimits[0]->limit)->toEqual(1500);
+
+        return;
     }
+
+    expect()->fail('Expected PrismRateLimitedException to be thrown.');
 });
 
 it('parses Gemini token per minute rate limit details', function (): void {
@@ -125,7 +129,11 @@ it('parses Gemini token per minute rate limit details', function (): void {
         expect($e->rateLimits[0])->toBeInstanceOf(ProviderRateLimit::class);
         expect($e->rateLimits[0]->name)->toEqual('generate_content_paid_tier_input_token_count');
         expect($e->rateLimits[0]->limit)->toEqual(16000);
+
+        return;
     }
+
+    expect()->fail('Expected PrismRateLimitedException to be thrown.');
 });
 
 it('throws a PrismRateLimitedException with a 429 response code for cache', function (): void {
