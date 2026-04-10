@@ -8,7 +8,6 @@ use Generator;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Prism\Prism\Audio\AudioResponse as TextToSpeechResponse;
 use Prism\Prism\Audio\TextToSpeechRequest;
@@ -225,7 +224,7 @@ class Gemini extends Provider
 
             $retryTimestamp = strtotime($headerRetryAfter);
             if ($retryTimestamp !== false) {
-                $retryAfter = $retryTimestamp - Carbon::now()->timestamp;
+                $retryAfter = $retryTimestamp - time();
 
                 return $retryAfter > 0 ? $retryAfter : null;
             }
