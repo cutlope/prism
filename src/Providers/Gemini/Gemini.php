@@ -225,7 +225,9 @@ class Gemini extends Provider
 
             $retryTimestamp = strtotime($headerRetryAfter);
             if ($retryTimestamp !== false) {
-                return max(0, $retryTimestamp - Carbon::now()->timestamp);
+                $retryAfter = $retryTimestamp - Carbon::now()->timestamp;
+
+                return $retryAfter > 0 ? $retryAfter : null;
             }
         }
 
