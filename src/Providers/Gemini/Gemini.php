@@ -8,6 +8,7 @@ use Generator;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Prism\Prism\Audio\AudioResponse as TextToSpeechResponse;
 use Prism\Prism\Audio\TextToSpeechRequest;
@@ -217,8 +218,15 @@ class Gemini extends Provider
     protected function parseRetryAfter(Response $response, array $data): ?int
     {
         $headerRetryAfter = $response->header('retry-after');
-        if ($headerRetryAfter !== null && is_numeric($headerRetryAfter)) {
-            return (int) $headerRetryAfter;
+        if (is_string($headerRetryAfter)) {
+            if (is_numeric($headerRetryAfter)) {
+                return (int) $headerRetryAfter;
+            }
+
+            $retryTimestamp = strtotime($headerRetryAfter);
+            if ($retryTimestamp !== false) {
+                return max(0, (int) ceil($retryTimestamp - Carbon::now()->timestamp));
+            }
         }
 
         $details = data_get($data, 'error.details', []);
