@@ -193,7 +193,14 @@ class Text
                 'searchQueries' => collect($output)
                     ->filter(fn (array $item): bool => ($item['type'] ?? null) === 'web_search_call')
                     ->filter(fn (array $item): bool => data_get($item, 'action.type') === 'search')
-                    ->map(fn (array $item): ?string => data_get($item, 'action.query'))
+                    ->flatMap(function (array $item): array {
+                        return collect([
+                            ...Arr::wrap(data_get($item, 'action.queries')),
+                            data_get($item, 'action.query'),
+                        ])
+                            ->filter(fn (mixed $query): bool => is_string($query) && $query !== '')
+                            ->all();
+                    })
                     ->filter()
                     ->unique()
                     ->values()
