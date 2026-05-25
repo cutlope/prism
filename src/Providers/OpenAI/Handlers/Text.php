@@ -59,7 +59,7 @@ class Text
 
         $this->citations = $this->extractCitations($data);
 
-        return match ($finishReason = $this->mapFinishReason($data)) {
+        return match ($finishReason = $this->mapTextFinishReason($data)) {
             FinishReason::ToolCalls => $this->handleToolCalls($data, $request, $response),
             FinishReason::Stop => $this->handleStop($data, $request, $response),
             FinishReason::Length => throw new PrismException(sprintf(
@@ -93,7 +93,7 @@ class Text
         $providerToolCalls = ProviderToolCallMap::map(data_get($data, 'output', []));
 
         $request->addMessage(new AssistantMessage(
-            content: data_get($data, 'output.{last}.content.0.text') ?? '',
+            content: $this->extractResponseText($data),
             toolCalls: $toolCalls,
             additionalContent: Arr::whereNotNull([
                 'citations' => $this->citations,
@@ -157,6 +157,98 @@ class Text
 
     /**
      * @param  array<string, mixed>  $data
+     */
+    protected function mapTextFinishReason(array $data): FinishReason
+    {
+        if (data_get($data, 'status') === 'completed' && $this->extractResponseText($data) !== '') {
+            return FinishReason::Stop;
+        }
+
+        return $this->mapFinishReason($data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function extractResponseText(array $data): string
+    {
+        $outputText = data_get($data, 'output_text');
+
+        if (is_string($outputText) && $outputText !== '') {
+            return $outputText;
+        }
+
+        $finalAnswerText = $this->findOutputText(
+            $data,
+            fn (array $item): bool => data_get($item, 'phase') === 'final_answer'
+        );
+
+        if ($finalAnswerText !== '') {
+            return $finalAnswerText;
+        }
+
+        return $this->findOutputText($data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  (callable(array<string, mixed>): bool)|null  $filter
+     */
+    protected function findOutputText(array $data, ?callable $filter = null): string
+    {
+        $output = data_get($data, 'output', []);
+
+        if (! is_array($output)) {
+            return '';
+        }
+
+        foreach (array_reverse($output) as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            if ($filter !== null && ! $filter($item)) {
+                continue;
+            }
+
+            $text = $this->textFromOutputItem($item);
+
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    protected function textFromOutputItem(array $item): string
+    {
+        $content = data_get($item, 'content', []);
+
+        if (! is_array($content)) {
+            return '';
+        }
+
+        foreach ($content as $part) {
+            if (! is_array($part)) {
+                continue;
+            }
+
+            $text = data_get($part, 'text');
+
+            if (is_string($text) && $text !== '') {
+                return $text;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
      * @param  ToolResult[]  $toolResults
      */
     protected function addStep(
@@ -169,8 +261,8 @@ class Text
         $output = data_get($data, 'output', []);
 
         $this->responseBuilder->addStep(new Step(
-            text: data_get($data, 'output.{last}.content.0.text') ?? '',
-            finishReason: $this->mapFinishReason($data),
+            text: $this->extractResponseText($data),
+            finishReason: $this->mapTextFinishReason($data),
             toolCalls: ToolCallMap::map(array_filter($output, fn (array $output): bool => $output['type'] === 'function_call')),
             toolResults: $toolResults,
             providerToolCalls: ProviderToolCallMap::map($output),
